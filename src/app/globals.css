@@ -1,0 +1,258 @@
+@import "tailwindcss";
+
+:root {
+  --background: #070505;
+  --foreground: #f3ece0;
+  --surface: #0d0a07;
+  --card: #110b07;
+  --edge: rgba(255, 122, 26, 0.16);
+  --edge-strong: rgba(255, 122, 26, 0.38);
+  --ember: #ff7a1a;
+  --flame: #ff9a3d;
+  --gold: #ffd28a;
+  --muted: #6f6357;
+  --cream: #f3ece0;
+}
+
+:root[data-theme="light"] {
+  --background: #f6efe3;
+  --foreground: #211609;
+  --surface: #fbf4e7;
+  --card: #fff9ee;
+  --edge: rgba(200, 108, 24, 0.22);
+  --edge-strong: rgba(200, 108, 24, 0.45);
+  --ember: #e15f08;
+  --flame: #ff8a2a;
+  --gold: #a8540f;
+  --muted: #7d6c5c;
+  --cream: #211609;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-edge: var(--edge);
+  --color-ember: var(--ember);
+  --color-flame: var(--flame);
+  --color-gold: var(--gold);
+  --color-muted: var(--muted);
+  --color-cream: var(--cream);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(1100px 460px at 50% -120px, rgba(255, 122, 26, 0.13), transparent 62%),
+    radial-gradient(900px 420px at 50% 112%, rgba(0, 0, 0, 0.65), transparent 62%);
+}
+
+:root[data-theme="light"] body::before {
+  background:
+    radial-gradient(1100px 460px at 50% -120px, rgba(255, 122, 26, 0.2), transparent 62%),
+    radial-gradient(900px 420px at 50% 112%, rgba(255, 138, 42, 0.07), transparent 62%);
+}
+
+::selection {
+  background: rgba(255, 122, 26, 0.35);
+  color: #fff;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2016;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:root[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #d9c9b4;
+}
+
+.font-display {
+  font-family: var(--font-display), Georgia, "Times New Roman", serif;
+  letter-spacing: 0.01em;
+  font-weight: 400;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: 220% center;
+  }
+}
+@keyframes flicker-in {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+    filter: brightness(3);
+  }
+  12% {
+    opacity: 1;
+  }
+  26% {
+    opacity: 0.72;
+    filter: brightness(0.85);
+  }
+  42% {
+    opacity: 1;
+  }
+  58% {
+    opacity: 0.88;
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+    filter: brightness(1);
+  }
+}
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 16px rgba(255, 122, 26, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 34px rgba(255, 122, 26, 0.65);
+  }
+}
+@keyframes ribbon-flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+@keyframes ticker {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+@keyframes flame-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-2px) scale(1.08);
+  }
+}
+@keyframes orbit {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@utility text-shimmer {
+  background: linear-gradient(
+    100deg,
+    #ffd28a 0%,
+    #ff9a3d 28%,
+    #fff3e0 50%,
+    #ff7a1a 72%,
+    #ffd28a 100%
+  );
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 7s linear infinite;
+}
+
+:root[data-theme="light"] .text-shimmer {
+  background: linear-gradient(
+    100deg,
+    #a8540f 0%,
+    #e15f08 28%,
+    #7a4a12 50%,
+    #f2a33c 72%,
+    #a8540f 100%
+  );
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 7s linear infinite;
+}
+
+@utility message-flicker {
+  animation: flicker-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@utility glow-pulse {
+  animation: pulse-glow 1.8s ease-in-out infinite;
+}
+
+@utility glow-ember {
+  box-shadow:
+    0 0 22px rgba(255, 122, 26, 0.45),
+    0 0 60px rgba(255, 122, 26, 0.14);
+}
+
+@utility time-glow {
+  text-shadow:
+    0 0 16px rgba(255, 122, 26, 0.55),
+    0 0 44px rgba(255, 122, 26, 0.25);
+}
+
+@utility ribbon {
+  background: linear-gradient(90deg, #ff9a3d, #ff5e1a, #ff9a3d);
+  background-size: 200% auto;
+  animation:
+    shimmer 3s linear infinite,
+    ribbon-flicker 2.4s ease-in-out infinite;
+}
+
+@utility animate-ticker {
+  animation: ticker 36s linear infinite;
+}
+
+@utility flame-float {
+  animation: flame-float 1.6s ease-in-out infinite;
+}
+
+@utility orbit {
+  animation: orbit 2.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* The printable artifact: force a clean white edition on any page. */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}
