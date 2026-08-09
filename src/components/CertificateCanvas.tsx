@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { downloadCanvas, MONO, SANS, wrapText } from "@/lib/canvas";
 import { formatDate, ordinal } from "@/lib/wall";
+import { track } from "@/lib/analytics";
 
 interface CertificateCanvasProps {
   content: string;
@@ -218,6 +219,7 @@ export default function CertificateCanvas({
       />
       <button
         onClick={() => {
+          track("certificate_downloaded");
           const canvas = canvasRef.current;
           if (canvas) downloadCanvas(canvas, `wall-certificate-${certificateId}.png`);
         }}

@@ -21,6 +21,7 @@ import {
   wallEventDate,
 } from "@/lib/wall";
 import { getDeviceId, solveProof } from "@/lib/wall-client";
+import { track } from "@/lib/analytics";
 import Countdown from "./Countdown";
 import Finale from "./Finale";
 import VoiceAvatar from "./VoiceAvatar";
@@ -357,6 +358,7 @@ export default function LiveWall({
 
   // Initial fetch on mount — also loads which messages this device reacted to.
   useEffect(() => {
+    track("wall_view");
     const t = setTimeout(refresh, 0);
     return () => clearTimeout(t);
   }, [refresh]);
@@ -435,6 +437,7 @@ export default function LiveWall({
   const handleReact = useCallback(
     async (id: string) => {
       if (frozen || reacting.has(id) || reacted.has(id)) return;
+      track("reaction_added");
       setReacting((prev) => new Set(prev).add(id));
       const snap = messages.find((m) => m.id === id);
       const previous = snap?.reactions;

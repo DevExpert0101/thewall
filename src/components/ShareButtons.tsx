@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { track } from "@/lib/analytics";
 
 interface ShareButtonsProps {
   /** Absolute deep link to the message, e.g. "https://…/?v=42913". */
@@ -36,12 +37,14 @@ export default function ShareButtons({
       document.execCommand("copy");
       ta.remove();
     }
+    track("message_shared");
     setCopied(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setCopied(false), 2000);
   };
 
   const nativeShare = async () => {
+    track("message_shared");
     if (typeof navigator.share === "function") {
       try {
         await navigator.share({ title, text, url });

@@ -5,11 +5,16 @@ import {
   DEVICE_MAX_AGE,
   resolveDevice,
 } from "@/lib/device";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 
 // Anonymous identity for the Wall: no account required. The server mints an
 // id, pins it to an httpOnly cookie, and hands it back so the client can
 // compute proof-of-work with it. One device = one id = one 🔥 per message.
 export async function POST(req: NextRequest) {
+  if (!rateLimit(`device:${clientIp(req)}`, 60, 60_000)) {
+    return tooManyRequests();
+  }
+
   const body = await req.json().catch(() => null);
   const legacy = body?.reactorId;
 

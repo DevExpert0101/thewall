@@ -1,6 +1,7 @@
 import Link from "next/link";
 import BackNav from "@/components/BackNav";
 import FindYourMessage from "@/components/FindYourMessage";
+import TrackView from "@/components/TrackView";
 import { getWallSummaries } from "@/lib/server";
 import {
   isFrozen,
@@ -10,6 +11,12 @@ import {
 } from "@/lib/wall";
 
 export const dynamic = "force-dynamic";
+
+export const metadata = {
+  title: "The Archive — The Wall",
+  description:
+    "Every Wall ever sealed, browsable forever. Permanent time capsules that can never be edited or erased.",
+};
 
 export default async function ArchivePage() {
   const walls = await getWallSummaries();
@@ -33,6 +40,7 @@ export default async function ArchivePage() {
         />
       </header>
 
+      <TrackView event="archive_viewed" />
       {walls.length === 0 ? (
         <p className="py-24 text-center font-display text-3xl text-muted">
           No walls yet. History is being written right now.

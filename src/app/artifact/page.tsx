@@ -13,6 +13,12 @@ import FindYourMessage from "@/components/FindYourMessage";
 
 export const dynamic = "force-dynamic";
 
+export const metadata = {
+  title: "The permanent record — The Wall",
+  description:
+    "The latest Wall, sealed forever. An uneditable, permanent time capsule of human voices.",
+};
+
 export default async function ArtifactPage() {
   const current = await getWall();
   const record = await getArtifactWall();

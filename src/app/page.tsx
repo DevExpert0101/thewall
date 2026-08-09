@@ -3,6 +3,7 @@ import LiveWall from "@/components/LiveWall";
 import ViewerCount from "@/components/ViewerCount";
 import Countdown from "@/components/Countdown";
 import FindYourMessage from "@/components/FindYourMessage";
+import TrackView from "@/components/TrackView";
 import { getLiveMessages, getWall } from "@/lib/server";
 import {
   isFrozen,
@@ -36,6 +37,7 @@ export default async function Home({
 
   return (
     <main className="flex w-full flex-1 flex-col">
+      <TrackView event="landing_view" />
       {/* Hero / masthead */}
       <header className="relative flex flex-col items-center px-4 pb-14 pt-16 text-center sm:pt-24">
         {frozen && wall ? (

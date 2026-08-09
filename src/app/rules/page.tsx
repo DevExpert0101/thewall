@@ -34,6 +34,14 @@ const RULES = [
     title: "Don't break the Wall",
     body: "Abuse the payment system or the rules, and your voice is struck from the record by a moderator. The number stays; the voice goes.",
   },
+  {
+    title: "Payments & refunds",
+    body: "One confirmed payment, one permanent message. If your payment confirms and your message is accepted, there is no refund — your voice is now part of history. If your payment confirms but your message is rejected by moderation, it is refunded. If a payment is sent incorrectly — wrong coin, wrong network, or wrong amount — it may not be recoverable.",
+  },
+  {
+    title: "One coin, one price",
+    body: "The Wall accepts a single network and a single coin. $1 is $1 — never more, never less. If the exchange rate drifts, we adjust the coin amount so you always pay exactly one dollar.",
+  },
 ];
 
 export default function RulesPage() {

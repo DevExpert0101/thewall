@@ -14,6 +14,25 @@ import {
 
 export const dynamic = "force-dynamic";
 
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const wall = await getWallById(id);
+  if (!wall) return { title: "The Wall — record not found" };
+  return {
+    title: `${wall.title} — The permanent record`,
+    description: `The Wall is closed forever. ${wall.title} — an uneditable, permanent time capsule.`,
+    openGraph: {
+      title: `${wall.title} — The permanent record`,
+      description: `The Wall is closed forever. Every voice remains, ranked, permanent and uneditable.`,
+      type: "website",
+    },
+  };
+}
+
 export default async function ArchiveWallPage({
   params,
 }: {

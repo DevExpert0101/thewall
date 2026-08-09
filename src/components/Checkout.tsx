@@ -6,6 +6,7 @@ import { QRCodeSVG } from "qrcode.react";
 import NewWallButton from "@/components/NewWallButton";
 import ShareButtons from "@/components/ShareButtons";
 import Countdown from "@/components/Countdown";
+import { track } from "@/lib/analytics";
 import { shortHash, formatMessageNumber } from "@/lib/wall";
 
 interface CheckoutProps {
@@ -64,6 +65,12 @@ export default function Checkout({ frozen, wallTitle, endsAt, createdAt }: Check
     typeof window === "undefined" ? [] : loadSaved(),
   );
 
+  const handleCompose = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const v = e.target.value.slice(0, 140);
+    if (v.length > 0 && content.length === 0) track("message_start");
+    setContent(v);
+  };
+
   const saveMessage = (c: CheckoutPayload) => {
     const list = loadSaved();
     const entry: SavedMessage = {
@@ -90,6 +97,7 @@ export default function Checkout({ frozen, wallTitle, endsAt, createdAt }: Check
       return;
     }
     setBusy(true);
+    track("checkout_started");
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
@@ -102,6 +110,7 @@ export default function Checkout({ frozen, wallTitle, endsAt, createdAt }: Check
         return;
       }
       setCheckout(data);
+      track("payment_started");
       setPhase("paying");
     } catch {
       setError("Network error. Try again.");
@@ -177,6 +186,8 @@ export default function Checkout({ frozen, wallTitle, endsAt, createdAt }: Check
             confirmations: data.confirmations,
             verifyLink: data.verifyLink,
           });
+          track("payment_confirmed");
+          track("message_published");
           saveMessage(checkout);
           setPhase("confirmed");
         } else {
@@ -266,7 +277,7 @@ export default function Checkout({ frozen, wallTitle, endsAt, createdAt }: Check
             <textarea
               id="message"
               value={content}
-              onChange={(e) => setContent(e.target.value.slice(0, 140))}
+              onChange={handleCompose}
               rows={4}
               placeholder="What do you want the world to know?"
               className="w-full resize-none rounded-xl border border-edge bg-card/80 p-4 text-lg leading-relaxed text-cream placeholder:text-muted/50 outline-none transition focus:border-ember/60 focus:glow-ember"
@@ -307,7 +318,9 @@ export default function Checkout({ frozen, wallTitle, endsAt, createdAt }: Check
                 className="underline decoration-edge-strong underline-offset-2 hover:text-gold"
               >
                 The Wall rules
-              </Link>
+              </Link>{" "}
+              — including the{" "}
+              <span className="text-muted">payment &amp; refund policy</span>
             </span>
           </label>
           <button
@@ -318,15 +331,18 @@ export default function Checkout({ frozen, wallTitle, endsAt, createdAt }: Check
             {busy ? "Preparing your stone…" : "Pay $1"}
           </button>
           <p className="text-center text-xs text-muted">
-            Anonymous · immutable · paid in crypto
+            Anonymous · immutable · one dollar
           </p>
         </div>
       )}
 
       {phase === "paying" && checkout && (
         <div className="flex flex-col items-center gap-5 rounded-2xl border border-ember/40 bg-surface/70 p-8 text-center backdrop-blur-sm">
-          <p className="text-xs uppercase tracking-[0.3em] text-muted">
-            Send the exact amount to the address below
+          <p className="font-display text-5xl text-gold time-glow">
+            Pay $1
+          </p>
+          <p className="max-w-sm text-sm leading-relaxed text-muted">
+            Your message is reserved. Pay $1 to etch it into The Wall forever.
           </p>
           <div className="rounded-2xl border border-edge bg-card p-4 glow-ember">
             <QRCodeSVG
@@ -337,11 +353,8 @@ export default function Checkout({ frozen, wallTitle, endsAt, createdAt }: Check
             />
           </div>
           <div className="flex flex-col items-center gap-1">
-            <span className="font-mono text-3xl font-semibold text-gold time-glow">
-              {checkout.amount} {checkout.coin}
-            </span>
-            <span className="text-xs uppercase tracking-widest text-muted">
-              = $1.00 USD
+            <span className="font-mono text-xs uppercase tracking-widest text-muted">
+              Send ≈ {checkout.amount} {checkout.coin} — always $1.00
             </span>
           </div>
           <div className="flex w-full items-center gap-2">

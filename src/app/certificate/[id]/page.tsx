@@ -5,11 +5,22 @@ import CertificateCanvas from "@/components/CertificateCanvas";
 import ShareButtons from "@/components/ShareButtons";
 import Countdown from "@/components/Countdown";
 import BackNav from "@/components/BackNav";
+import TrackView from "@/components/TrackView";
 import { supabase } from "@/lib/supabase";
 import { getWallById } from "@/lib/server";
+import { messageMetadata } from "@/lib/metadata";
 import { isFrozen, formatMessageNumber, ordinal, wallEventDate } from "@/lib/wall";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  return messageMetadata(id);
+}
 
 export default async function CertificatePage({
   params,
@@ -56,6 +67,7 @@ export default async function CertificatePage({
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-14">
+      <TrackView event="certificate_viewed" />
       <BackNav />
       <header className="flex flex-col items-center gap-3 text-center">
         <p className="text-[10px] uppercase tracking-[0.4em] text-muted">

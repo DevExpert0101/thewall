@@ -1,8 +1,13 @@
 import { NextRequest } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { explorerLink } from "@/lib/wall";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 
 export async function GET(req: NextRequest) {
+  if (!rateLimit(`pay-status:${clientIp(req)}`, 120, 60_000)) {
+    return tooManyRequests();
+  }
+
   const paymentId = req.nextUrl.searchParams.get("paymentId");
   if (!paymentId) {
     return Response.json({ error: "Missing payment id." }, { status: 400 });

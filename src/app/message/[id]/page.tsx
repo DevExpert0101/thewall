@@ -12,7 +12,7 @@ export async function generateMetadata({
   return messageMetadata(id);
 }
 
-export default async function CardPage({
+export default async function MessagePage({
   params,
 }: {
   params: Promise<{ id: string }>;

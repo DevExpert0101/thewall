@@ -3,10 +3,15 @@ import { supabase } from "@/lib/supabase";
 import { getWall } from "@/lib/server";
 import { isOpen } from "@/lib/wall";
 import { runModeration, moderationMessage } from "@/lib/moderation";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 
 const AMOUNT_USD = 1;
 
 export async function POST(req: NextRequest) {
+  if (!rateLimit(`checkout:${clientIp(req)}`, 5, 60_000)) {
+    return tooManyRequests();
+  }
+
   const body = await req.json().catch(() => null);
   const content =
     typeof body?.content === "string" ? body.content.trim() : "";

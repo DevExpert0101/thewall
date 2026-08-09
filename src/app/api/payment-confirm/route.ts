@@ -1,8 +1,13 @@
 import { NextRequest } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { randomTxHash, explorerLink } from "@/lib/wall";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  if (!rateLimit(`pay-confirm:${clientIp(req)}`, 10, 60_000)) {
+    return tooManyRequests();
+  }
+
   const body = await req.json().catch(() => null);
   const paymentId = body?.paymentId;
   const rawTx = body?.txHash;
