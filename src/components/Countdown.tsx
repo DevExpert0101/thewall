@@ -1,118 +1,70 @@
-"use client";
+import { formatCountdown } from '../lib/format'
 
-import { useEffect, useRef, useState } from "react";
-
-interface CountdownProps {
-  endsAt: string;
-  createdAt?: string;
-  onExpire?: () => void;
-  /** "compact" renders a single small line — for checkout, certificates, cards. */
-  variant?: "full" | "compact";
+type Props = {
+  remainingMs: number
+  frozen: boolean
+  compact?: boolean
+  /** Hero-scale urgency clock */
+  prominent?: boolean
+  /** Always reinforce the product rule */
+  showMantra?: boolean
+  /** Modal / card surfaces */
+  tone?: 'default' | 'on-dark' | 'inset'
+  label?: string
 }
 
-function format(ms: number): string {
-  if (ms <= 0) return "00:00:00";
-  const total = Math.floor(ms / 1000);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  return [h, m, s]
-    .map((n) => String(n).padStart(2, "0"))
-    .join(":");
-}
+/**
+ * Rule 29 — Never let users forget the clock.
+ * The entire product is powered by: “You only have today.”
+ */
+export function Countdown({
+  remainingMs,
+  frozen,
+  compact,
+  prominent,
+  showMantra = false,
+  tone = 'default',
+  label,
+}: Props) {
+  const t = formatCountdown(remainingMs)
+  const classes = [
+    'countdown',
+    frozen ? 'frozen' : '',
+    compact ? 'compact' : '',
+    prominent ? 'prominent' : '',
+    tone !== 'default' ? `tone-${tone}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
-export default function Countdown({
-  endsAt,
-  createdAt,
-  onExpire,
-  variant = "full",
-}: CountdownProps) {
-  const ends = new Date(endsAt).getTime();
-  const starts = createdAt ? new Date(createdAt).getTime() : null;
+  const liveLabel =
+    label ?? (prominent ? 'Gone forever in' : 'You only have today · closes in')
 
-  const [now, setNow] = useState<number>(() => Date.now());
-  const firedRef = useRef(false);
-
-  useEffect(() => {
-    const tick = () => {
-      const n = Date.now();
-      setNow(n);
-      if (ends - n <= 0 && !firedRef.current) {
-        firedRef.current = true;
-        onExpire?.();
-      }
-    };
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [ends, onExpire]);
-
-  const remaining = ends - now;
-  const expired = remaining <= 0;
-  const finalSeconds = !expired && remaining <= 3000;
-  const elapsed =
-    starts !== null && ends > starts
-      ? Math.min(1, Math.max(0, (now - starts) / (ends - starts)))
-      : 0;
-
-  if (variant === "compact") {
+  if (frozen) {
     return (
-      <p className="flex items-center justify-center gap-2 font-mono text-[10px] uppercase tracking-[0.25em] text-muted">
-        {!expired && <span className="h-1.5 w-1.5 rounded-full bg-red-500 flame-float" />}
-        <span suppressHydrationWarning>
-          {expired
-            ? "The wall has frozen"
-            : finalSeconds
-              ? `The wall is ending · ${format(remaining)}`
-              : `Closes in ${format(remaining)}`}
-        </span>
-      </p>
-    );
+      <div className={classes} aria-live="polite">
+        <span className="countdown-label">{label ?? 'Frozen forever'}</span>
+        <span className="countdown-digits">00:00:00</span>
+        {showMantra && (
+          <span className="countdown-mantra">You only had today.</span>
+        )}
+      </div>
+    )
   }
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <span
-        className="text-[10px] uppercase tracking-[0.3em] text-muted"
-        suppressHydrationWarning
-      >
-        {expired
-          ? "The wall has frozen"
-          : finalSeconds
-            ? "The wall is ending"
-            : "Time left on the wall"}
+    <div className={classes} aria-live="polite">
+      <span className="countdown-label">{liveLabel}</span>
+      <span className="countdown-digits">
+        <span>{t.h}</span>
+        <i>:</i>
+        <span>{t.m}</span>
+        <i>:</i>
+        <span>{t.s}</span>
       </span>
-      <div className="flex items-center gap-3">
-        {!expired && (
-          <span className="h-1.5 w-1.5 rounded-full bg-red-500 flame-float" />
-        )}
-        <span
-          suppressHydrationWarning
-          className={`font-mono font-semibold tabular-nums tracking-tight ${
-            expired
-              ? "text-muted"
-              : finalSeconds
-                ? "animate-pulse text-6xl text-red-400 time-glow sm:text-7xl"
-                : "text-gold time-glow"
-          } ${finalSeconds ? "" : "text-4xl sm:text-5xl"}`}
-        >
-          {expired ? "00:00:00" : format(remaining)}
-        </span>
-      </div>
-      {starts !== null && (
-        <div className="mt-1 h-1 w-48 overflow-hidden rounded-full bg-surface">
-          <div
-            suppressHydrationWarning
-            className={`h-full rounded-full transition-[width] duration-1000 ease-linear ${
-              expired
-                ? "bg-muted"
-                : finalSeconds
-                  ? "bg-red-500 glow-pulse"
-                  : "bg-gradient-to-r from-ember to-gold glow-pulse"
-            }`}
-            style={{ width: `${expired ? 100 : elapsed * 100}%` }}
-          />
-        </div>
+      {showMantra && (
+        <span className="countdown-mantra">You only have today.</span>
       )}
     </div>
-  );
+  )
 }

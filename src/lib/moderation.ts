@@ -1,261 +1,268 @@
-// Automatic pre-publication moderation for The Wall.
-//
-// Pipeline order matches the production risk profile — cheap deterministic
-// gates first (fast fail, no network), AI moderation last as the final pass.
-//
-//   length → spam → pii → url → profanity/adult → threat/harassment → AI
-//
-// The deterministic rules are deliberately conservative: this is an anonymous,
-// paid wall, and the cost of a false positive is a rejected submission (no
-// payment is ever created for a rejected message). The AI pass only runs when
-// OPENAI_API_KEY is set and fails open if the service is unreachable — the
-// deterministic rules remain the baseline.
+import type { WallMessage } from '../types'
 
-export type ModerationReason =
-  | "length"
-  | "spam"
-  | "pii"
-  | "url"
-  | "profanity"
-  | "adult"
-  | "threat"
-  | "harassment"
-  | "ai";
+/** Public tombstone — number stays; content is gone. */
+export const REMOVED_PLACEHOLDER = '[Removed by moderation]'
 
-export interface ModerationResult {
-  approved: boolean;
-  reasons: ModerationReason[];
+export function isRemovedMessage(message: Pick<WallMessage, 'text'>): boolean {
+  return message.text === REMOVED_PLACEHOLDER
 }
 
-const MAX_LENGTH = 140;
+export type ModerationStageId =
+  | 'length'
+  | 'spam'
+  | 'pii'
+  | 'url'
+  | 'adult'
+  | 'threat'
+  | 'ai'
 
-// ---- Normalization ---------------------------------------------------------
-// Lowercase, decode common leetspeak so "h4te" matches "hate", strip
-// separators so "f.u.c.k" matches "fuck", collapse whitespace.
-const LEET: Record<string, string> = {
-  "4": "a",
-  "@": "a",
-  "8": "b",
-  "3": "e",
-  "9": "g",
-  "1": "i",
-  "!": "i",
-  "0": "o",
-  "$": "s",
-  "5": "s",
-  "7": "t",
-  "+": "t",
-};
-
-function normalize(input: string): string {
-  const lower = input.toLowerCase();
-  let out = "";
-  for (const ch of lower) {
-    out += LEET[ch] ?? ch;
-  }
-  return out.replace(/[^a-z0-9]+/g, " ").trim();
+export type ModerationStageResult = {
+  id: ModerationStageId
+  label: string
+  ok: boolean
+  detail: string
 }
 
-// ---- Blocklists ------------------------------------------------------------
-
-const PROFANITY = [
-  "fuck", "fucking", "fucker", "fucked", "fuck you", "shit", "shitty",
-  "bitch", "bastard", "asshole", "motherfucker", "mf", "cunt", "douchebag",
-  "piss off", "bullshit", "dumbass", "wanker", "twat", "cock", "dickhead",
-  "piece of shit", "prick",
-];
-
-// Hate slurs — the wall is anonymous; a targeted slur is harassment.
-const SLURS = [
-  "nigger", "nigga", "faggot", "fag", "dyke", "tranny", "retard", "spic",
-  "chink", "kike", "wetback", "gook", "cracker", "white trash", "jew",
-  "paki", "raghead", "sand nigger",
-];
-
-const ADULT = [
-  "porn", "porno", "pornhub", "onlyfans", "hentai", "milf", "nude",
-  "naked", "sex", "sexy", "sexual", "nsfw", "strip", "stripper",
-  "erotic", "orgasm", "anal", "blowjob", "boobs", "tits", "pussy",
-  "nipple", "masturbat", "bondage", "escort", "squirt", "cum", "horny",
-  "hookup", "dildo", "vibrator", "fetish", "kink", "slut",
-];
-
-const THREATS = [
-  "kill yourself", "kill urself", "kys", "go die", "die in a fire",
-  "you should die", "i will kill", "i'll kill", "im going to kill",
-  "i'm going to kill", "i will murder", "i'll murder", "i will rape",
-  "i'll rape", "i will shoot", "i'll shoot", "gonna shoot up",
-  "i know where you live", "i know your address", "im coming for you",
-  "i'm coming for you", "i'll find you", "i will find you",
-  "slit your throat", "cut your throat", "hang yourself", "rape you",
-  "molest", "murder you", "watch your back", "burn your house",
-  "dox you", "ill dox", "i will dox",
-];
-
-const SCAM = [
-  "free bitcoin", "free btc", "claim reward", "airdrop", "guaranteed profit",
-  "double your", "invest", "private key", "passphrase", "send me",
-  "dm me", "message me", "cash app", "paypal.me", "cashapp", "venmo",
-  "gift card", "won a prize", "you won", "click the link", "click here",
-  "join telegram", "join my telegram", "hit me up", "sign up",
-  "referral", "crypto signals", "pump and dump", "fomo", "get rich",
-  "passive income", "withdrawal",
-];
-
-const ADULT_AND_PROFANITY = new Set([...PROFANITY, ...SLURS, ...ADULT]);
-
-function containsAny(normalized: string, terms: readonly string[]): boolean {
-  return terms.some((t) => normalized.includes(t));
+export type ModerationVerdict = {
+  ok: boolean
+  stages: ModerationStageResult[]
+  failedStage: ModerationStageId | null
+  reason: string | null
 }
 
-// ---- Pattern gates ---------------------------------------------------------
+export type ReportReason =
+  | 'harassment'
+  | 'illegal'
+  | 'hate'
+  | 'adult'
+  | 'spam'
+  | 'other'
+
+export const REPORT_REASONS: { id: ReportReason; label: string }[] = [
+  { id: 'harassment', label: 'Harassment' },
+  { id: 'illegal', label: 'Illegal content' },
+  { id: 'hate', label: 'Hate' },
+  { id: 'adult', label: 'Adult' },
+  { id: 'spam', label: 'Spam' },
+  { id: 'other', label: 'Other' },
+]
+
+export const MODERATION_PIPELINE_LABELS: Record<ModerationStageId, string> = {
+  length: 'Length validation',
+  spam: 'Spam detection',
+  pii: 'PII detection',
+  url: 'URL detection',
+  adult: 'Adult content',
+  threat: 'Threat / harassment detection',
+  ai: 'AI moderation',
+}
+
+const MAX_LEN = 140
+const MIN_LEN = 1
 
 const URL_RE =
-  /https?:\/\/|www\.|\b[a-z0-9][a-z0-9-]{1,61}\.(com|net|org|io|co|xyz|info|me|ru|gg|link|click|biz|ws|tv|app|dev|site|online)\b/i;
+  /(?:https?:\/\/|www\.|t\.me\/|discord\.gg\/|bit\.ly\/|tinyurl\.com\/|[\w-]+\.(?:com|net|org|io|gg|me|co|xyz|link|click)\b)/i
 
-const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
+const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
 const PHONE_RE =
-  /(?:\+?\d{1,3}[\s().-]*)?(?:\(\d{2,4}\)[\s().-]*)?\d{3}[\s().-]*\d{3,4}(?:[\s().-]*\d{2,4})?/;
-const SSN_RE = /\b\d{3}-\d{2}-\d{4}\b/;
-const IP_RE = /\b(?:\d{1,3}\.){3}\d{1,3}\b/;
-const CARD_RE = /\b(?:\d{4}[ -]?){3}\d{4}\b/;
-const CRYPTO_RE =
-  /\b(?:bc1[a-z0-9]{8,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|0x[a-fA-F0-9]{40}|T[a-zA-Z0-9]{33}|L[a-km-z1-9]{26,33}|D[a-km-z1-9]{26,33})\b/;
+  /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}\b|\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b/
+const CC_RE = /\b(?:\d[ -]*?){13,19}\b/
+const SSN_RE = /\b\d{3}-\d{2}-\d{4}\b/
+const HANDLE_ADDR_RE =
+  /\b(?:my (?:name|number|email|address) is|dm me at|text me at|call me at)\b/i
 
-const EMOJI = /[\p{Extended_Pictographic}]/gu;
-const REPEAT_CHAR = /(.)\1{9,}/;
-const REPEAT_TOKEN = /\b(\w{3,})\b(?:[\s,]+(?:\1\b)){3,}/;
-const VOWELS = /[aeiouy]/gi;
-const LETTERS = /[a-z]/gi;
+const ADULT_RE =
+  /\b(?:onlyfans|porn|nsfw|nude|nudes|xxx|sex tape|blowjob|handjob|cumshot|explicit sex)\b/i
 
-function emojiCount(content: string): number {
-  return content.match(EMOJI)?.length ?? 0;
+const THREAT_RE =
+  /\b(?:i(?:'|’)ll kill|going to kill|kill you|murder you|rape you|dox(?:x)?(?: you)?|swat you|bomb (?:your|the)|shoot (?:up|you)|gas the)\b/i
+
+const HARASS_RE =
+  /\b(?:kys|kill yourself|you should die|hope you die|rape threat)\b/i
+
+const HATE_RE =
+  /\b(?:racial slur placeholder|nazi|heil hitler|white power|gas the jews)\b/i
+
+const SPAM_PHRASE_RE =
+  /\b(?:free crypto|airdrop|double your|whatsapp me|click here now|make \$\d|investment opportunity|telegram @)\b/i
+
+function stage(
+  id: ModerationStageId,
+  ok: boolean,
+  detail: string,
+): ModerationStageResult {
+  return { id, label: MODERATION_PIPELINE_LABELS[id], ok, detail }
 }
 
-// ---- The pipeline ----------------------------------------------------------
-
-function deterministicCheck(content: string): ModerationReason[] {
-  const reasons: ModerationReason[] = [];
-
-  // length — hard bound already enforced by the schema, cheap to check here.
-  if (content.trim().length < 1 || content.length > MAX_LENGTH) {
-    reasons.push("length");
+function checkLength(text: string): ModerationStageResult {
+  const len = text.length
+  if (len < MIN_LEN) {
+    return stage('length', false, 'Message is empty.')
   }
-
-  // url — external links are a spam/traffic vector on a paid wall.
-  if (URL_RE.test(content)) reasons.push("url");
-
-  // pii — personal data of third parties has no place here.
-  if (
-    EMAIL_RE.test(content) ||
-    SSN_RE.test(content) ||
-    IP_RE.test(content) ||
-    CARD_RE.test(content) ||
-    CRYPTO_RE.test(content)
-  ) {
-    reasons.push("pii");
+  if (len > MAX_LEN) {
+    return stage('length', false, `Messages are limited to ${MAX_LEN} characters.`)
   }
-  // Phone numbers need enough digits to be credible; skip "000-000-0000".
-  const digits = content.replace(/\D/g, "");
-  if (digits.length >= 10 && digits.length <= 15 && PHONE_RE.test(content)) {
-    reasons.push("pii");
-  }
-
-  const normalized = normalize(content);
-
-  // profanity + adult — shared vocabulary, matched after normalization.
-  if (containsAny(normalized, [...ADULT_AND_PROFANITY])) {
-    const terms = normalized.split(" ");
-    const adult = terms.some((t) => ADULT.includes(t));
-    reasons.push(adult ? "adult" : "profanity");
-  }
-
-  // threat / harassment — directed harm or doxxing.
-  if (containsAny(normalized, THREATS)) {
-    reasons.push(normalized.includes("kill yourself") ||
-      normalized.includes("kill urself") ||
-      normalized.includes("kys") ||
-      normalized.includes("go die") ||
-      normalized.includes("you should die") ||
-      normalized.includes("hang yourself")
-      ? "harassment"
-      : "threat");
-  }
-  if (containsAny(normalized, SLURS)) reasons.push("harassment");
-
-  // spam — repetition, gibberish, emoji floods, scam pitches.
-  if (
-    REPEAT_CHAR.test(content) ||
-    REPEAT_TOKEN.test(content) ||
-    emojiCount(content) > 8 ||
-    containsAny(normalized, SCAM)
-  ) {
-    reasons.push("spam");
-  }
-  const letters = content.match(LETTERS)?.length ?? 0;
-  const vowels = content.match(VOWELS)?.length ?? 0;
-  if (letters > 12 && vowels / letters < 0.12) reasons.push("spam");
-  const upper = content.replace(/[^A-Z]/g, "").length;
-  if (content.length >= 15 && upper / content.length > 0.7) reasons.push("spam");
-
-  return reasons;
+  return stage('length', true, `${len}/${MAX_LEN} characters.`)
 }
 
-async function aiCheck(content: string): Promise<boolean> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return false;
-  try {
-    const res = await fetch("https://api.openai.com/v1/moderations", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify({
-        model: "omni-moderation-latest",
-        input: content,
-      }),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return false;
-    const data = (await res.json()) as { results?: Array<{ flagged?: boolean }> };
-    return data.results?.[0]?.flagged === true;
-  } catch {
-    // Fail open: the deterministic rules are the baseline, an AI outage must
-    // not take the whole wall down.
-    return false;
+function checkSpam(text: string): ModerationStageResult {
+  const compact = text.replace(/\s+/g, '')
+  if (/(.)\1{7,}/u.test(compact)) {
+    return stage('spam', false, 'Repeated character spam detected.')
+  }
+  const letters = text.replace(/[^a-z]/gi, '')
+  if (letters.length >= 12 && letters === letters.toUpperCase() && /[A-Z]/.test(letters)) {
+    return stage('spam', false, 'All-caps spam pattern detected.')
+  }
+  const emojiCount = (text.match(/\p{Extended_Pictographic}/gu) ?? []).length
+  if (emojiCount >= 12) {
+    return stage('spam', false, 'Emoji flood detected.')
+  }
+  if (SPAM_PHRASE_RE.test(text)) {
+    return stage('spam', false, 'Promotional / spam phrasing detected.')
+  }
+  const words = text.toLowerCase().split(/\s+/).filter(Boolean)
+  if (words.length >= 6) {
+    const uniq = new Set(words)
+    if (uniq.size / words.length < 0.35) {
+      return stage('spam', false, 'Repetitive word spam detected.')
+    }
+  }
+  return stage('spam', true, 'No spam signals.')
+}
+
+function checkPii(text: string): ModerationStageResult {
+  if (EMAIL_RE.test(text)) {
+    return stage('pii', false, 'Email addresses are not allowed on The Wall.')
+  }
+  if (PHONE_RE.test(text)) {
+    return stage('pii', false, 'Phone numbers are not allowed on The Wall.')
+  }
+  if (SSN_RE.test(text)) {
+    return stage('pii', false, 'Government ID patterns are not allowed.')
+  }
+  if (/(?:\d[ -]+){12,}\d/.test(text) && CC_RE.test(text)) {
+    return stage('pii', false, 'Payment card numbers are not allowed.')
+  }
+  if (HANDLE_ADDR_RE.test(text)) {
+    return stage('pii', false, 'Direct contact / identity prompts are not allowed.')
+  }
+  return stage('pii', true, 'No PII patterns found.')
+}
+
+function checkUrl(text: string): ModerationStageResult {
+  if (URL_RE.test(text)) {
+    return stage('url', false, 'Links and domains are not allowed on The Wall.')
+  }
+  return stage('url', true, 'No URLs found.')
+}
+
+function checkAdult(text: string): ModerationStageResult {
+  if (ADULT_RE.test(text)) {
+    return stage('adult', false, 'Adult / sexual content is not allowed.')
+  }
+  return stage('adult', true, 'No adult-content signals.')
+}
+
+function checkThreat(text: string): ModerationStageResult {
+  if (THREAT_RE.test(text) || HARASS_RE.test(text) || HATE_RE.test(text)) {
+    return stage('threat', false, 'Threat, harassment, or hate language detected.')
+  }
+  return stage('threat', true, 'No threat / harassment signals.')
+}
+
+/**
+ * Local AI-style ensemble (prototype).
+ * Scores toxicity-adjacent signals; fails closed on high risk.
+ * Production would call a hosted moderation model here.
+ */
+function checkAi(text: string): ModerationStageResult {
+  let risk = 0
+  const lower = text.toLowerCase()
+
+  if (/\b(?:hate|kill|rape|dox|nazi|terror)\b/i.test(lower)) risk += 0.35
+  if (ADULT_RE.test(text)) risk += 0.4
+  if (THREAT_RE.test(text) || HARASS_RE.test(text)) risk += 0.55
+  if (URL_RE.test(text) || EMAIL_RE.test(text)) risk += 0.25
+  if (SPAM_PHRASE_RE.test(text)) risk += 0.3
+  if (/[!$]{3,}/.test(text)) risk += 0.15
+  // Obfuscation: k.i.l.l / k-i-l-l
+  if (/\bk[\W_]*i[\W_]*l[\W_]*l\b/i.test(text)) risk += 0.45
+  if (/\br[\W_]*a[\W_]*p[\W_]*e\b/i.test(text)) risk += 0.5
+
+  if (risk >= 0.55) {
+    return stage(
+      'ai',
+      false,
+      `AI moderation rejected this message (risk ${(risk * 100).toFixed(0)}%).`,
+    )
+  }
+  return stage('ai', true, `AI moderation cleared (risk ${(risk * 100).toFixed(0)}%).`)
+}
+
+const STAGE_FNS: Array<(text: string) => ModerationStageResult> = [
+  checkLength,
+  checkSpam,
+  checkPii,
+  checkUrl,
+  checkAdult,
+  checkThreat,
+  checkAi,
+]
+
+/** Run the full pre-publish pipeline. Stops recording failures but still runs all stages for UI. */
+export function moderateMessage(raw: string): ModerationVerdict {
+  const text = raw.trim()
+  const stages = STAGE_FNS.map((fn) => fn(text))
+  const failed = stages.find((s) => !s.ok) ?? null
+  return {
+    ok: !failed,
+    stages,
+    failedStage: failed?.id ?? null,
+    reason: failed
+      ? `${failed.label}: ${failed.detail}`
+      : null,
   }
 }
 
-export async function runModeration(
-  content: string,
-): Promise<ModerationResult> {
-  const reasons = deterministicCheck(content);
-  if (reasons.length > 0) {
-    return { approved: false, reasons };
+/** Async wrapper — simulates AI latency; swap for real model call later. */
+export async function moderateMessageAsync(
+  raw: string,
+  onStage?: (stage: ModerationStageResult, index: number) => void,
+): Promise<ModerationVerdict> {
+  const text = raw.trim()
+  const stages: ModerationStageResult[] = []
+
+  for (let i = 0; i < STAGE_FNS.length; i++) {
+    await wait(i === STAGE_FNS.length - 1 ? 220 : 70 + i * 25)
+    const result = STAGE_FNS[i](text)
+    stages.push(result)
+    onStage?.(result, i)
+    // Fail closed immediately after a blocking stage (pipeline order)
+    if (!result.ok) {
+      // Still “run” remaining labels as skipped for UI clarity
+      for (let j = i + 1; j < STAGE_FNS.length; j++) {
+        const skipped = stage(
+          ['length', 'spam', 'pii', 'url', 'adult', 'threat', 'ai'][j] as ModerationStageId,
+          false,
+          'Skipped — earlier stage failed.',
+        )
+        // Don't mark skipped as the failure reason; keep first failure
+        stages.push({ ...skipped, ok: true, detail: 'Not reached.' })
+        onStage?.(stages[stages.length - 1], j)
+      }
+      return {
+        ok: false,
+        stages,
+        failedStage: result.id,
+        reason: `${result.label}: ${result.detail}`,
+      }
+    }
   }
 
-  if (await aiCheck(content)) {
-    return { approved: false, reasons: ["ai"] };
-  }
-
-  return { approved: true, reasons: [] };
+  return { ok: true, stages, failedStage: null, reason: null }
 }
 
-// Short, human-readable copy for a rejected message.
-export function moderationMessage(reasons: ModerationReason[]): string {
-  const labels: Partial<Record<ModerationReason, string>> = {
-    length: "over the length limit",
-    spam: "looked like spam",
-    pii: "contained personal information",
-    url: "contained a link",
-    profanity: "contained profanity",
-    adult: "contained adult content",
-    threat: "contained threatening language",
-    harassment: "contained harassment",
-    ai: "didn't pass AI moderation",
-  };
-  const unique = [...new Set(reasons)];
-  const text = unique.map((r) => labels[r] ?? r).join(" and ");
-  return `This message was flagged by automatic moderation (${text}). Nothing was charged.`;
+function wait(ms: number) {
+  return new Promise<void>((r) => window.setTimeout(r, ms))
 }
