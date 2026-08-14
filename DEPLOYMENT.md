@@ -76,8 +76,8 @@ Dummy keys from `.env.example` fail the production contract and `/api/health`.
 
 ## 5. Vercel project
 
-1. Import the Git repository in Vercel (Framework Preset: Next.js).
-2. Root directory: repository root. Output: Next.js default (no custom server).
+1. Import the Git repository in Vercel (Framework Preset: **Next.js**). If this project previously used Vite, open Settings → General and set Framework to Next.js. Clear **Output Directory** — do not use `dist`. The Next.js builder writes `.next`; `vercel.json` pins the framework.
+2. Root directory: repository root. No custom server.
 3. Add the canonical domain (Production). Preview URLs can stay on `*.vercel.app`.
 4. Environment variables — set **Production** (and Preview if you want a Sepolia preview):
 
