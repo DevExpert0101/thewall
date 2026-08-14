@@ -24,7 +24,7 @@ vi.mock("@marsidev/react-turnstile", () => ({
 const initiateBasePayment = vi.fn(() => Promise.resolve({ id: `0x${"ab".repeat(32)}` }));
 
 vi.mock("@/lib/payment/browser", () => ({
-  initiateBasePayment: (...args: unknown[]) => initiateBasePayment(...args),
+  initiateBasePayment: () => initiateBasePayment(),
 }));
 
 function json(body: unknown, status = 200) {
