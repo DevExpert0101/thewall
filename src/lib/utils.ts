@@ -38,14 +38,29 @@ export function formatUtcDate(iso: string): string {
   }).format(new Date(iso));
 }
 
+function asOrigin(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim().replace(/\/$/, "");
+  if (!trimmed) return null;
+  const withScheme =
+    trimmed.startsWith("http://") || trimmed.startsWith("https://")
+      ? trimmed
+      : `https://${trimmed.replace(/^\/+/, "")}`;
+  try {
+    return new URL(withScheme).origin;
+  } catch {
+    return null;
+  }
+}
+
 export function siteUrl(): string {
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (explicit) return explicit.replace(/\/$/, "");
+  const explicit = asOrigin(process.env.NEXT_PUBLIC_SITE_URL);
+  if (explicit) return explicit;
   if (typeof window === "undefined") {
-    const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL?.replace(/^https?:\/\//, "");
-    if (prod) return `https://${prod.replace(/\/$/, "")}`;
-    const preview = process.env.VERCEL_URL?.replace(/^https?:\/\//, "");
-    if (preview) return `https://${preview.replace(/\/$/, "")}`;
+    const prod = asOrigin(process.env.VERCEL_PROJECT_PRODUCTION_URL);
+    if (prod) return prod;
+    const preview = asOrigin(process.env.VERCEL_URL);
+    if (preview) return preview;
   }
   return "http://localhost:3000";
 }

@@ -14,12 +14,32 @@ function blankToUndefined(value: unknown): unknown {
   return trimmed.length === 0 ? undefined : trimmed;
 }
 
+function optionalUrl(value: unknown): unknown {
+  const trimmed = blankToUndefined(value);
+  if (typeof trimmed !== "string") return undefined;
+  return z.string().url().safeParse(trimmed).success ? trimmed : undefined;
+}
+
+function optionalAddress(value: unknown): unknown {
+  const trimmed = blankToUndefined(value);
+  if (typeof trimmed !== "string") return undefined;
+  return address.safeParse(trimmed).success ? trimmed : undefined;
+}
+
+function publicOrigin(value: unknown): unknown {
+  const trimmed = blankToUndefined(value);
+  if (typeof trimmed !== "string") return undefined;
+  if (z.string().url().safeParse(trimmed).success) return trimmed;
+  const hosted = `https://${trimmed.replace(/^\/+/, "")}`;
+  return z.string().url().safeParse(hosted).success ? hosted : undefined;
+}
+
 const publicSchema = z.object({
   NEXT_PUBLIC_SITE_URL: z.preprocess(
-    blankToUndefined,
+    publicOrigin,
     z.string().url().default("http://localhost:3000"),
   ),
-  NEXT_PUBLIC_SUPABASE_URL: z.preprocess(blankToUndefined, z.string().url().optional()),
+  NEXT_PUBLIC_SUPABASE_URL: z.preprocess(optionalUrl, z.string().url().optional()),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.preprocess(
     blankToUndefined,
     z.string().min(1).optional(),
@@ -32,11 +52,12 @@ const publicSchema = z.object({
     blankToUndefined,
     z.string().min(1).default("the-wall"),
   ),
-  NEXT_PUBLIC_BASE_NETWORK: z.preprocess(
-    blankToUndefined,
-    network.default("base-sepolia"),
-  ),
-  NEXT_PUBLIC_TREASURY_ADDRESS: z.preprocess(blankToUndefined, address.optional()),
+  NEXT_PUBLIC_BASE_NETWORK: z.preprocess((value) => {
+    const trimmed = blankToUndefined(value);
+    if (typeof trimmed !== "string") return undefined;
+    return network.safeParse(trimmed).success ? trimmed : undefined;
+  }, network.default("base-sepolia")),
+  NEXT_PUBLIC_TREASURY_ADDRESS: z.preprocess(optionalAddress, address.optional()),
 });
 
 const serverSchema = z.object({
@@ -81,8 +102,12 @@ export function getPublicEnv(): PublicEnv {
 }
 
 export function hasSupabaseConfig(): boolean {
-  const env = getPublicEnv();
-  return Boolean(env.NEXT_PUBLIC_SUPABASE_URL && env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  try {
+    const env = getPublicEnv();
+    return Boolean(env.NEXT_PUBLIC_SUPABASE_URL && env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  } catch {
+    return false;
+  }
 }
 
 function flagOn(value: string | undefined): boolean | null {

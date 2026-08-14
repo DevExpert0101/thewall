@@ -10,6 +10,7 @@ export default defineConfig({
   plugins: [tsconfigPaths(), react()],
   resolve: {
     alias: {
+      "@": path.join(root, "src"),
       "server-only": path.join(root, "vitest.server-only.ts"),
     },
   },

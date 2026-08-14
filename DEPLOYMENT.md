@@ -152,7 +152,7 @@ Certificate and admin routes are `noindex` and `private, no-store`.
 
 ## 8. Error monitoring hooks
 
-- `src/instrumentation.ts` — `register()` asserts the production env contract when `VERCEL_ENV=production`. `onRequestError` reports server failures.
+- `src/instrumentation.ts` — `register()` logs production env problems when `VERCEL_ENV=production`. It does not throw, so a missing secret cannot 500 every request. `onRequestError` reports server failures. `/api/health` stays reachable and reports `ok: false` until the contract is complete.
 - `src/lib/observability/report.ts` — logs a redacted JSON line; POSTs to `ERROR_WEBHOOK_URL` when set.
 - `src/app/error.tsx` and `src/app/global-error.tsx` — client boundaries log a digest only (no exception text).
 

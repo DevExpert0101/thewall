@@ -88,7 +88,11 @@ const WINDOW_MS = 24 * HOUR_MS;
 const ELAPSED_MS = 6 * HOUR_MS;
 
 function shouldPersist(): boolean {
-  return process.env.VITEST !== "true" && process.env.NODE_ENV !== "test";
+  return (
+    process.env.VITEST !== "true" &&
+    process.env.NODE_ENV !== "test" &&
+    !process.env.VERCEL
+  );
 }
 
 function persistPath(): string {

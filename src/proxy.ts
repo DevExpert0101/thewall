@@ -2,8 +2,16 @@ import { NextRequest } from "next/server";
 import { withSupabaseSession } from "@/lib/supabase/proxy-client";
 import { contentSecurityPolicy } from "@/lib/security/csp";
 
+function requestNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
 export async function proxy(request: NextRequest) {
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const nonce = requestNonce();
   const csp = contentSecurityPolicy(nonce, process.env.NODE_ENV !== "production");
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);

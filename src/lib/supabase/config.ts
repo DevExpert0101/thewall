@@ -7,14 +7,18 @@ export type SupabaseAnonConfig = {
 };
 
 export function getSupabaseAnonConfig(): SupabaseAnonConfig | null {
-  const env = getPublicEnv();
-  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  try {
+    const env = getPublicEnv();
+    if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      return null;
+    }
+    return {
+      url: env.NEXT_PUBLIC_SUPABASE_URL,
+      anonKey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    };
+  } catch {
     return null;
   }
-  return {
-    url: env.NEXT_PUBLIC_SUPABASE_URL,
-    anonKey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  };
 }
 
 export function requireSupabaseAnonConfig(): SupabaseAnonConfig {

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { classifyPayments, classifyTurnstile } from "@/lib/health";
 import { TURNSTILE_DUMMY } from "@/lib/abuse/turnstile";
@@ -25,6 +26,15 @@ describe("error reports", () => {
     });
     expect(report.message).not.toContain("203.0.113.9");
     expect(JSON.stringify(report)).not.toMatch(/at /);
+  });
+});
+
+describe("instrumentation", () => {
+  it("does not crash the process when production env is incomplete", () => {
+    const src = readFileSync("src/instrumentation.ts", "utf8");
+    expect(src).not.toContain("assertProductionEnv");
+    expect(src).toContain("evaluateProductionEnv");
+    expect(src).toContain("console.error");
   });
 });
 

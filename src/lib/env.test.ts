@@ -19,11 +19,34 @@ describe("environment blanks", () => {
     }
   });
 
-  it("rejects an invalid treasury address", () => {
+  it("ignores an invalid treasury instead of failing the whole public env", () => {
     const parsed = envContract.publicSchema.safeParse({
       NEXT_PUBLIC_TREASURY_ADDRESS: "not-an-address",
     });
-    expect(parsed.success).toBe(false);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.NEXT_PUBLIC_TREASURY_ADDRESS).toBeUndefined();
+    }
+  });
+
+  it("accepts a host-only site URL", () => {
+    const parsed = envContract.publicSchema.safeParse({
+      NEXT_PUBLIC_SITE_URL: "thewall-pi.vercel.app",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.NEXT_PUBLIC_SITE_URL).toBe("https://thewall-pi.vercel.app");
+    }
+  });
+
+  it("ignores an invalid public network instead of failing the whole public env", () => {
+    const parsed = envContract.publicSchema.safeParse({
+      NEXT_PUBLIC_BASE_NETWORK: "ethereum",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.NEXT_PUBLIC_BASE_NETWORK).toBe("base-sepolia");
+    }
   });
 });
 
