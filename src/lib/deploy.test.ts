@@ -1,0 +1,72 @@
+import { describe, expect, it } from "vitest";
+import { classifyPayments, classifyTurnstile } from "@/lib/health";
+import { TURNSTILE_DUMMY } from "@/lib/abuse/turnstile";
+import { buildErrorReport } from "@/lib/observability/report";
+import { contentSecurityPolicy } from "@/lib/security/csp";
+import robots from "@/app/robots";
+import { ERROR_CODES, AppError } from "@/lib/errors";
+import { getNetwork } from "@/lib/env";
+
+describe("health classifiers", () => {
+  it("treats dummy Turnstile and the zero treasury as missing", () => {
+    expect(classifyTurnstile(TURNSTILE_DUMMY.sitePass, TURNSTILE_DUMMY.secretPass)).toBe(
+      "missing",
+    );
+    expect(classifyPayments("0x0000000000000000000000000000000000000000")).toBe("missing");
+    expect(classifyPayments("0x1111111111111111111111111111111111111111")).toBe("ok");
+  });
+});
+
+describe("error reports", () => {
+  it("redacts IPs and does not include stack traces", () => {
+    const report = buildErrorReport(new Error("failed for 203.0.113.9"), {
+      path: "/wall",
+      method: "GET",
+    });
+    expect(report.message).not.toContain("203.0.113.9");
+    expect(JSON.stringify(report)).not.toMatch(/at /);
+  });
+});
+
+describe("deploy surface", () => {
+  it("allows Turnstile, Supabase, Base, Coinbase, and WalletConnect in CSP", () => {
+    const header = contentSecurityPolicy("nonce", false);
+    expect(header).toContain("challenges.cloudflare.com");
+    expect(header).toContain("*.supabase.co");
+    expect(header).toContain("*.coinbase.com");
+    expect(header).toContain("*.walletconnect.com");
+    expect(header).toContain("mainnet.base.org");
+  });
+
+  it("points robots at the sitemap and hides admin plus certificates", () => {
+    const doc = robots();
+    expect(doc.sitemap).toMatch(/sitemap\.xml$/);
+    expect(doc.host).toBeTruthy();
+    const rules = Array.isArray(doc.rules) ? doc.rules : [doc.rules];
+    expect(JSON.stringify(rules)).toContain("/admin");
+    expect(JSON.stringify(rules)).toContain("/certificate");
+    expect(JSON.stringify(rules)).toContain("/claim");
+  });
+});
+
+describe("network toggle", () => {
+  it("rejects mismatched public and server networks", () => {
+    const snapshot = {
+      server: process.env.BASE_NETWORK,
+      pub: process.env.NEXT_PUBLIC_BASE_NETWORK,
+    };
+    process.env.BASE_NETWORK = "base";
+    process.env.NEXT_PUBLIC_BASE_NETWORK = "base-sepolia";
+    try {
+      expect(() => getNetwork()).toThrow(AppError);
+      try {
+        getNetwork();
+      } catch (error) {
+        expect((error as AppError).code).toBe(ERROR_CODES.CONFIG);
+      }
+    } finally {
+      process.env.BASE_NETWORK = snapshot.server;
+      process.env.NEXT_PUBLIC_BASE_NETWORK = snapshot.pub;
+    }
+  });
+});

@@ -1,0 +1,15 @@
+# A unique identifier for your project
+project_id = "thewall"
+
+[api]
+enabled = true
+
+[db]
+major_version = 15
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[db.migrations]
+schema_paths = []

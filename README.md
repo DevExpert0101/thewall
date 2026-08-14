@@ -1,89 +1,95 @@
 # THE WALL
 
-You have 24 hours to leave something behind.
+One day. One dollar. One sentence forever.
 
-**One dollar. One message. Forever.**
+A 24-hour anonymous monument: anyone can read it, 1.00 USDC on Base publishes one 140-character sentence, and when the clock reaches zero the wall becomes permanently read-only.
 
-Prototype web app for a single-day live message wall:
+This application is built for Vercel’s serverless model. There is no long-running Node process, no custom WebSocket server, and no Redis. Supabase holds data, auth, RLS, Realtime, and atomic SQL.
 
-- Live wall sorted by 🔥 reactions
-- 24-hour countdown (persisted in `localStorage`)
-- Floating trending strip
-- Simulated $1 paywall to etch (140 chars max)
-- Personalized certificate with PNG download / share
-- Demo controls: end in 60s, freeze now, new 24h wall
+## Stack
 
-## Run
+- Next.js App Router + TypeScript (strict)
+- Tailwind CSS + Radix primitives
+- Supabase (Postgres, anonymous auth, RLS, Realtime)
+- Base Pay / USDC on Base
+- Cloudflare Turnstile (server-verified)
+- Zod validation
+- Deploy: Vercel
+
+## Product states
+
+Derived from **server/database time** against `starts_at` / `ends_at` — never from the browser countdown.
+
+| Phase | Rule | Writes |
+| --- | --- | --- |
+| UPCOMING | `now < starts_at` | Blocked |
+| LIVE | `starts_at <= now < ends_at` | Publish + 🔥 |
+| FINALIZING | `now >= ends_at` and rankings not yet persisted | Blocked |
+| ARCHIVED | `finalized_at` or `archived_at` set | Blocked |
+
+Closing The Wall does **not** depend on a cron job. After `ends_at`, SQL functions and API routes reject writes. Rankings are finalized lazily on the next server request.
+
+## Ranking formulas (v1)
+
+Documented in `src/lib/ranking.ts`.
+
+- **New** — `published_at DESC`
+- **Most 🔥** — `reaction_count DESC, published_at ASC`
+- **Most 🔥 this hour** — reactions in the last 60 minutes
+- **Random** — per-request shuffle
+- **Trending** — `reaction_count / (hours_since_publish + 2) ^ 1.5`
+
+## Local setup
+
+1. Copy `.env.example` to `.env.local`. Leave the Supabase fields blank to use the built-in local Wall. Pay, publish, and certificates run in-process — no chain and no real USDC. Use **Finish this Wall** in the header (or after publish) to freeze this same day into `/archive`. Fill Supabase fields only when you have a real project.
+2. Create a Supabase project.
+3. Enable **Anonymous sign-ins** (Authentication → Providers).
+4. Apply every file in `supabase/migrations/` in filename order (SQL editor or `supabase db push`).
+5. For a live local window, insert one event row (see `DEPLOYMENT.md`). Do not invent a previous Wall.
+6. Insert your admin identity into `admin_users` (or set `ADMIN_EMAILS`) and create that Auth user.
+7. Cloudflare Turnstile: dummy keys in `.env.example` always pass and are for development only.
+8. `npm install` then `npm test` then `npm run dev`.
+
+### Supabase Realtime
+
+Enable Realtime on `public.public_message_events` only. That table contains public-safe new-message payloads. Individual 🔥 clicks are **not** broadcast globally; aggregates refresh on a short poll.
+
+### Row Level Security
+
+Public clients may read `events`, `event_counters`, `public_messages`, and `public_message_events`.
+
+They must not read payment intents, payments, wallets, ownership tokens, reports, moderation internals, or admin rows. Verification queries: `supabase/tests/rls.sql`.
+
+## Publishing flow
+
+Anonymous session → compose (140 graphemes) → Turnstile (server verify) → moderation preflight → payment intent (expires) → Base Pay 1.00 USDC → server verifies the transaction (never a client `paymentSuccessful` flag) → `publish_paid_message` SQL function assigns the next number atomically.
+
+The same transaction hash cannot publish twice (`UNIQUE` on `payments.transaction_hash` plus a row lock on the intent).
+
+## Certificates
+
+After a successful publish, the owner receives a random token **once**. Only the SHA-256 hash is stored. Certificate routes are `noindex`. Do not log tokens.
+
+## Ads / viral creatives
+
+Generated from live data (never fabricated counts):
+
+`/api/creatives?kind=countdown|milestone|message&ratio=16:9|1:1|9:16&number=4291`
+
+## Deploy
+
+See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for the exact Vercel + Supabase + Base + Turnstile checklist.
+
+Connect the repo to Vercel. Production uses `BASE_NETWORK=base` (or `base-sepolia` for a public testnet) with a matching `NEXT_PUBLIC_BASE_NETWORK`, a real Turnstile pair, and `NEXT_PUBLIC_SITE_URL=https://YOUR_DOMAIN`. Do not put `SUPABASE_SERVICE_ROLE_KEY` or `TURNSTILE_SECRET_KEY` in `NEXT_PUBLIC_` variables. Event close is `ends_at` in the database — not a cron job.
+
+## Cost posture
+
+Vercel serverless + Supabase + public Base RPC (optional dedicated RPC later) + Turnstile free tier. No Stripe, no always-on Node, no Kubernetes.
+
+## Tests
 
 ```bash
-npm install
-npm run dev
+npm test
 ```
 
-## Museum mode
-
-After freeze The Wall dies as a product surface:
-
-**Disabled:** new messages, reactions, edits, deletions, ranking changes  
-**Kept:** browse, search, share, certificates, downloads
-
-Post-closure search: result counts + filters (Most reacted, Random, Message number, Trending, Newest, Oldest).
-
-## Final artifact
-
-At zero the app plays a dramatic finale (3–2–1 → THE WALL IS CLOSED → monument screen).
-
-Primary public download: **interactive HTML archive** (read-only, searchable).  
-Secondary: **PDF collectible** (print dialog) and **JSON dataset**.
-
-## Certificate
-
-Post-event viral artifact. Shows **both**:
-
-- **Message number** (permanent entry order) — `#42,913`
-- **Final rank** (performance when frozen) — `#37`
-
-Also includes date, quote, 🔥 count, voice-of-wall line, unique certificate ID, and a QR to the archived message (`?m=`).
-
-## Trending algorithm
-
-Not raw “most 🔥 = #1” (that rewards early posters).
-
-```
-Trending Score =
-  reactionVelocity
-  × engagementQuality
-  × timeAdjustment
-  (+ recent burst velocity)
-```
-
-A message that catches fire 18 hours in can still climb — better competition across the full day.
-
-## Reactions
-
-Anyone can 🔥 without an account.
-
-Abuse controls (device-local in the prototype; enforce server-side in production):
-
-- One reaction per message per visitor/device  
-- Rate limits + cool-offs for bursts  
-- Suspicious metronome / bot-like pattern detection  
-- Soft human check (pointer activity + occasional math challenge) — never a signup wall
-
-
-No public accounts. The Wall only shows **Message #** and **Anonymous**.
-
-Never on the public wall: email, name, IP, wallet, tx hash, or device info.
-
-Payment data is stored in a **private ledger** (`the-wall:private-ledger:v1`) for fraud prevention, moderation, refunds, and legal needs — not rendered in the UI.
-
-## Crypto payments
-
-Messages publish **only after** a confirmed on-chain payment:
-
-1. Compose + agree to rules  
-2. Wallet pays the treasury (`VITE_TREASURY_ADDRESS`)  
-3. App verifies receipt (success, recipient, amount) + confirmations  
-4. Then the message is etched (public fields only); payment goes to the private ledger
-
-Copy `.env.example` → `.env.local`. Set `VITE_ALLOW_DEMO_CRYPTO=true` to simulate confirmation without a wallet.
+Covers event open/close rules, message validation, moderation preflight, payment amount/recipient helpers, duplicate/replay error mapping, certificate hashing, analytics redaction, numbering display, production env contract, and keyboard access on core controls. SQL concurrency and RLS checks live under `supabase/tests/`.
