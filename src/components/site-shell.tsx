@@ -39,10 +39,7 @@ export function SiteShell({
       {!isCertificate ? (
         <header className="site-header sticky top-0 z-40">
           <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:h-16 sm:px-6">
-            <Link
-              href="/"
-              className="wordmark font-display text-[0.95rem] tracking-[0.14em] text-paper sm:text-lg sm:tracking-[0.22em]"
-            >
+            <Link href="/" className="wordmark">
               {APP_NAME}
             </Link>
             <div className="flex items-center">
@@ -68,9 +65,9 @@ export function SiteShell({
         {children}
       </div>
       {!isCertificate ? (
-        <footer className="border-t border-line bg-ink/35 py-10">
-          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 sm:flex-row sm:items-end sm:justify-between sm:px-6">
-            <p className="font-display text-lg leading-snug text-mist">
+        <footer className="site-footer">
+          <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 sm:flex-row sm:items-end sm:justify-between sm:px-6">
+            <p className="font-monument text-base tracking-[0.14em] text-bronze sm:text-lg">
               One day. One dollar.
               <br className="sm:hidden" /> One sentence forever.
             </p>

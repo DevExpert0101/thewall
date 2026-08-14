@@ -45,10 +45,7 @@ export const MessageCard = memo(function MessageCard({
       )}
     >
       <div className="mb-3 flex items-baseline justify-between gap-3">
-        <Link
-          href={href}
-          className="font-mono text-[0.7rem] tracking-[0.18em] text-bronze hover:text-paper"
-        >
+        <Link href={href} className="message-number">
           {formatPublicNumber(message.publicNumber)}
         </Link>
         {rankLabel ? (

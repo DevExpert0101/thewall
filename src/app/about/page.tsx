@@ -11,7 +11,7 @@ export default function AboutPage() {
   return (
     <main className="mx-auto max-w-2xl px-4 py-16 sm:px-6 sm:py-24">
       <p className="kicker">About</p>
-      <h1 className="mt-5 font-display text-[clamp(2.6rem,8vw,4.6rem)] leading-[0.92] text-paper">
+      <h1 className="permanence-title mt-5">
         A monument, not a feed.
       </h1>
       <span className="title-rule mt-6 block" aria-hidden="true" />

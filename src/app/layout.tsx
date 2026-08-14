@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+import { Cinzel, Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+import { EmberField } from "@/components/ember-field";
 import { SiteShell } from "@/components/site-shell";
 import { APP_NAME, SUPPORTING_COPY, TAGLINE } from "@/lib/constants";
 import { isSimulation } from "@/lib/env";
@@ -24,6 +25,13 @@ const instrument = Instrument_Serif({
   variable: "--font-instrument",
   subsets: ["latin"],
   weight: "400",
+  display: "swap",
+});
+
+const cinzel = Cinzel({
+  variable: "--font-cinzel",
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
   display: "swap",
 });
 
@@ -64,14 +72,17 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       data-theme={DEFAULT_THEME}
       data-scroll-behavior="smooth"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${instrument.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${instrument.variable} ${cinzel.variable} h-full antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
-      <body className="grain min-h-full bg-void font-sans text-paper">
+      <body className="grain min-h-full bg-stone font-sans text-paper">
         <div className="atmosphere" aria-hidden="true">
           <div className="atmosphere-glow" />
+          <div className="atmosphere-rays" />
+          <div className="atmosphere-masonry" />
+          <EmberField />
         </div>
         <div className="relative z-10 min-h-full">
           <SiteShell simulation={isSimulation()}>{children}</SiteShell>

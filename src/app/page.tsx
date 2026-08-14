@@ -23,10 +23,19 @@ export default async function HomePage() {
   return (
     <main>
       <JsonLd event={event} />
-      <LandingHero event={event} />
+      <LandingHero
+        event={event}
+        inscriptions={preview
+          .filter((message) => !message.isRemoved)
+          .map((message) => ({
+            id: message.id,
+            text: message.text,
+            fires: message.reactionCount,
+          }))}
+      />
 
-      <section className="border-y border-line bg-ink/30">
-        <div className="mx-auto grid max-w-6xl grid-cols-1 divide-y divide-line sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+      <section className="stat-row">
+        <div className="mx-auto grid max-w-6xl grid-cols-1 sm:grid-cols-3">
           <Stat label="Sentences" value={formatCount(event.totalMessages)} />
           <Stat label="Fire" value={formatCount(event.totalReactions)} ember />
           <Stat
@@ -38,25 +47,31 @@ export default async function HomePage() {
       </section>
 
       {preview.length > 0 ? (
-        <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
-          <p className="kicker">Live on the wall</p>
-          <div className="mt-7 grid gap-3 md:grid-cols-2">
+        <section className="section-monument">
+          <div className="section-head">
+            <p className="kicker">Live on the wall</p>
+            <h2 className="section-title">Sentences already carved</h2>
+          </div>
+          <div className="mt-8 grid gap-4 md:grid-cols-2">
             {preview.slice(0, 4).map((message) => (
               <MessageCard key={message.id} message={message} phase={event.phase} event={event} />
             ))}
           </div>
-          <div className="mt-8">
-            <Link href="/wall" className="btn-ghost kicker hover:text-paper">
+          <div className="mt-10">
+            <Link href="/wall" className="btn btn-line">
               Open the wall →
             </Link>
           </div>
         </section>
       ) : null}
 
-      <section className="border-y border-line">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
-          <p className="kicker">How a sentence is born</p>
-          <div className="mt-10 grid gap-12 md:grid-cols-3 md:gap-8">
+      <section className="rite-band">
+        <div className="section-monument">
+          <div className="section-head">
+            <p className="kicker">How a sentence is born</p>
+            <h2 className="section-title">Three acts. Then stone.</h2>
+          </div>
+          <div className="mt-12 grid gap-6 md:grid-cols-3">
             <Step n="01" title="Write 140 characters" body="One sentence. No name. No profile. No audience to perform for." />
             <Step n="02" title="Pay 1 USDC" body="On Base. The payment buys exactly this sentence — nothing else." />
             <Step n="03" title="It stays" body="When the clock dies, The Wall freezes. Your number is never reused." />
@@ -65,9 +80,12 @@ export default async function HomePage() {
       </section>
 
       {preview.length > 0 ? (
-        <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
-          <p className="kicker">Trending</p>
-          <div className="mt-7 space-y-3">
+        <section className="section-monument">
+          <div className="section-head">
+            <p className="kicker">Trending</p>
+            <h2 className="section-title">What the fire chose</h2>
+          </div>
+          <div className="mt-8 space-y-4">
             {preview.map((message, i) => (
               <MessageCard
                 key={`t-${message.id}`}
@@ -82,13 +100,13 @@ export default async function HomePage() {
         </section>
       ) : null}
 
-      <section className="border-y border-line bg-ink/40">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+      <section className="shrine-band">
+        <div className="section-monument">
           <p className="kicker">Permanence</p>
-          <h2 className="mt-5 max-w-3xl font-display text-[clamp(2.2rem,6vw,4.6rem)] leading-[0.95] text-paper">
+          <h2 className="permanence-title">
             A sentence you cannot unwrite, on a wall that cannot reopen.
           </h2>
-          <div className="pay-plaque mt-12 max-w-lg p-7 sm:p-10">
+          <div className="pay-plaque shrine-plaque mt-12 max-w-lg p-7 sm:p-10">
             <p className="font-mono text-[0.7rem] tracking-[0.22em] text-bronze">MESSAGE #004291</p>
             <p className="mt-5 font-display text-2xl leading-snug text-paper sm:text-3xl">
               “I hope whoever finds this in 50 years knows we were trying.”
@@ -105,7 +123,7 @@ export default async function HomePage() {
         <Faq />
       </section>
 
-      <section id="safety" className="mx-auto max-w-3xl px-4 pb-24 sm:px-6">
+      <section id="safety" className="mx-auto max-w-3xl px-4 pb-28 sm:px-6">
         <p className="kicker">Safety</p>
         <p className="lede mt-5">
           Messages are published as plain text, never as HTML. Illegal content is
@@ -134,9 +152,9 @@ function Stat({
   ember?: boolean;
 }) {
   return (
-    <div className="px-6 py-9 text-center sm:py-11">
+    <div className="stat-tablet">
       <p
-        className={`font-mono text-3xl tabular tracking-tight sm:text-4xl ${live ? "text-ember" : ember ? "text-flame" : "text-paper"}`}
+        className={`stat-value ${live ? "text-ember" : ember ? "text-flame" : "text-paper"}`}
       >
         {live ? (
           <span className="inline-flex items-center justify-center gap-2">
@@ -154,9 +172,9 @@ function Stat({
 
 function Step({ n, title, body }: { n: string; title: string; body: string }) {
   return (
-    <div className="step-rule">
-      <p className="font-mono text-xs tracking-[0.18em] text-bronze">{n}</p>
-      <h3 className="mt-4 font-display text-2xl leading-tight text-paper sm:text-3xl">{title}</h3>
+    <div className="rite-step">
+      <p className="rite-num">{n}</p>
+      <h3 className="mt-5 font-display text-2xl leading-tight text-paper sm:text-3xl">{title}</h3>
       <p className="mt-3 text-sm leading-relaxed text-mist">{body}</p>
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Countdown } from "@/components/countdown";
 import { PrimaryCta } from "@/components/primary-cta";
@@ -7,7 +8,47 @@ import { PublishDialog } from "@/components/publish-dialog";
 import { TAGLINE } from "@/lib/constants";
 import type { EventSnapshot } from "@/lib/types";
 
-export function LandingHero({ event }: { event: EventSnapshot }) {
+const TAGLINE_LINES = TAGLINE.split(/(?<=\.)\s+/);
+
+export type WallInscription = {
+  id: string;
+  text: string;
+  fires: number;
+};
+
+function writePace(text: string): "short" | "mid" | "long" {
+  if (text.length < 34) return "short";
+  if (text.length < 50) return "mid";
+  return "long";
+}
+
+function LivingInscriptions({ inscriptions }: { inscriptions: WallInscription[] }) {
+  const shown = inscriptions.filter((item) => item.text.trim().length > 0).slice(0, 6);
+  if (shown.length === 0) return null;
+
+  return (
+    <div className="hero-ghosts" aria-hidden="true">
+      {shown.map((item, index) => (
+        <p
+          key={item.id}
+          className="hero-ghost"
+          data-pace={writePace(item.text)}
+          data-size={String((index % 4) + 1)}
+        >
+          <span className="hero-ghost-inner">“{item.text}”</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+export function LandingHero({
+  event,
+  inscriptions = [],
+}: {
+  event: EventSnapshot;
+  inscriptions?: WallInscription[];
+}) {
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState(event.phase);
   const target = phase === "upcoming" ? event.startsAt : event.endsAt;
@@ -15,27 +56,44 @@ export function LandingHero({ event }: { event: EventSnapshot }) {
     phase === "upcoming" ? "Until The Wall opens" : phase === "live" ? "Until The Wall closes" : "The Wall is closed";
 
   return (
-    <section className="relative flex min-h-[calc(100dvh-3.5rem)] flex-col justify-center px-4 py-16 sm:min-h-[calc(100dvh-4rem)] sm:px-6 sm:py-20">
-      <div className="mx-auto w-full max-w-6xl text-center">
-        <p className="kicker">A 24-hour monument</p>
-        <h1 className="mt-5 font-display text-[clamp(3.35rem,16vw,11.5rem)] leading-[0.82] text-paper">
-          THE WALL
+    <section className="hero-monument">
+      <div className="hero-wall" aria-hidden="true" />
+      <LivingInscriptions inscriptions={inscriptions} />
+
+      <div className="hero-stage">
+        {phase === "live" ? (
+          <p className="hero-live">
+            <span className="live-dot" aria-hidden="true" />
+            The monument is open
+          </p>
+        ) : (
+          <p className="kicker">A 24-hour monument</p>
+        )}
+
+        <h1 className="monument-title">
+          <span className="monument-the">THE</span>
+          <span className="monument-wall">WALL</span>
         </h1>
-        <span className="title-rule mx-auto mt-6 block animate-ember-draw" aria-hidden="true" />
-        <p className="mt-5 text-[0.7rem] uppercase tracking-[0.28em] text-bronze sm:text-xs">
-          {TAGLINE}
+        <span className="title-rule monument-rule mx-auto mt-6 block animate-ember-draw" aria-hidden="true" />
+        <p className="monument-tagline">
+          {TAGLINE_LINES.map((line) => (
+            <span key={line} className="tagline-line">
+              {line}
+            </span>
+          ))}
         </p>
-        <p className="lede mx-auto mt-7 max-w-xl">
+        <p className="lede hero-lede">
           For 24 hours, the world gets one anonymous wall. Anyone can read it. One
           dollar buys one 140-character message. When the clock reaches zero, no one
           can add another word.
         </p>
-        <p className="mx-auto mt-6 max-w-md text-[0.7rem] uppercase leading-relaxed tracking-[0.18em] text-ash sm:text-xs">
+        <p className="hero-vow">
           No account. No followers. No profile. No identity.
           <br />
           Just your words.
         </p>
-        <div className="mt-12 sm:mt-14">
+
+        <div className={phase === "live" ? "hero-clock hero-clock-live" : "hero-clock"}>
           <Countdown
             targetIso={target}
             serverNow={event.serverNow}
@@ -47,10 +105,17 @@ export function LandingHero({ event }: { event: EventSnapshot }) {
             }}
           />
         </div>
-        <div className="mt-10 sm:mt-12">
-          <PrimaryCta phase={phase} onPublish={() => setOpen(true)} className="w-full sm:w-auto" />
+
+        <div className="hero-actions">
+          <PrimaryCta phase={phase} onPublish={() => setOpen(true)} className="hero-cta" />
+          {phase === "live" ? (
+            <Link href="/wall" className="btn btn-line hero-secondary">
+              See The Wall
+            </Link>
+          ) : null}
         </div>
       </div>
+
       <PublishDialog
         open={open}
         onOpenChange={setOpen}

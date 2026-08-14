@@ -31,6 +31,9 @@ export default async function WallPage() {
   return (
     <main className="py-6">
       <h1 className="sr-only">The Wall</h1>
+      <p className="wall-enter" aria-hidden="true">
+        THE WALL
+      </p>
       <WallLive event={event} initial={initial} initialCursor={initialCursor} />
     </main>
   );

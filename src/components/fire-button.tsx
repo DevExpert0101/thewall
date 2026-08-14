@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { hasLocalReaction, rememberLocalReaction } from "@/lib/reactions/local";
 import { cn, formatCount } from "@/lib/utils";
 
@@ -17,15 +17,19 @@ export function FireButton({
 }) {
   const [local, setLocal] = useState(count);
   const [trackedId, setTrackedId] = useState(messageId);
-  const [reacted, setReacted] = useState(() => hasLocalReaction(messageId));
+  const [reacted, setReacted] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pulse, setPulse] = useState(false);
 
+  useEffect(() => {
+    setReacted(hasLocalReaction(messageId));
+  }, [messageId]);
+
   if (trackedId !== messageId) {
     setTrackedId(messageId);
     setLocal(count);
-    setReacted(hasLocalReaction(messageId));
+    setReacted(false);
   }
 
   const value = Math.max(local, count);

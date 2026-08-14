@@ -129,6 +129,7 @@ export const colors = themes[DEFAULT_THEME].colors;
 
 export const fonts = {
   display: 'var(--font-instrument), ui-serif, Georgia, "Times New Roman", serif',
+  monument: 'var(--font-cinzel), var(--font-instrument), ui-serif, Georgia, serif',
   sans: "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif",
   mono: "var(--font-geist-mono), ui-monospace, monospace",
 } as const;

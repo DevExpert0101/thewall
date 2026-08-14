@@ -51,7 +51,7 @@ export default async function ArchivePage() {
         Archive
         {simulating ? " · Simulation" : ""}
       </p>
-      <h1 className="mt-5 font-display text-[clamp(2.8rem,9vw,6.5rem)] leading-[0.9] text-paper">
+      <h1 className="permanence-title mt-5">
         {closed ? "The Wall, frozen." : "Not yet."}
       </h1>
       <span className="title-rule mt-6 block" aria-hidden="true" />
