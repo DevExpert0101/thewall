@@ -35,12 +35,12 @@ export default async function HomePage() {
       />
 
       <section className="stat-row">
-        <div className="mx-auto grid max-w-6xl grid-cols-1 sm:grid-cols-3">
+        <div className="mx-auto grid max-w-6xl grid-cols-3">
           <Stat label="Sentences" value={formatCount(event.totalMessages)} />
           <Stat label="Fire" value={formatCount(event.totalReactions)} ember />
           <Stat
-            label="Status"
-            value={event.phase === "live" ? "LIVE" : event.phase.toUpperCase()}
+            label="The clock"
+            value={event.phase === "live" ? "Open" : event.phase === "upcoming" ? "Soon" : "Closed"}
             live={event.phase === "live"}
           />
         </div>
@@ -49,7 +49,7 @@ export default async function HomePage() {
       {preview.length > 0 ? (
         <section className="section-monument">
           <div className="section-head">
-            <p className="kicker">Live on the wall</p>
+            <p className="kicker">On the wall</p>
             <h2 className="section-title">Sentences already carved</h2>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-2">
@@ -59,7 +59,7 @@ export default async function HomePage() {
           </div>
           <div className="mt-10">
             <Link href="/wall" className="btn btn-line">
-              Open the wall →
+              Open the wall
             </Link>
           </div>
         </section>
@@ -68,37 +68,16 @@ export default async function HomePage() {
       <section className="rite-band">
         <div className="section-monument">
           <div className="section-head">
-            <p className="kicker">How a sentence is born</p>
-            <h2 className="section-title">Three acts. Then stone.</h2>
+            <p className="kicker">How a sentence stays</p>
+            <h2 className="section-title">Write. Pay. It remains.</h2>
           </div>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             <Step n="01" title="Write 140 characters" body="One sentence. No name. No profile. No audience to perform for." />
-            <Step n="02" title="Pay 1 USDC" body="On Base. The payment buys exactly this sentence — nothing else." />
+            <Step n="02" title="Pay one dollar" body="1 USDC on Base, once. The wallet is not your name. Nothing else is sold." />
             <Step n="03" title="It stays" body="When the clock dies, The Wall freezes. Your number is never reused." />
           </div>
         </div>
       </section>
-
-      {preview.length > 0 ? (
-        <section className="section-monument">
-          <div className="section-head">
-            <p className="kicker">Trending</p>
-            <h2 className="section-title">What the fire chose</h2>
-          </div>
-          <div className="mt-8 space-y-4">
-            {preview.map((message, i) => (
-              <MessageCard
-                key={`t-${message.id}`}
-                message={message}
-                phase={event.phase}
-                event={event}
-                featured={i === 0}
-                rankLabel={i === 0 ? "Trending" : undefined}
-              />
-            ))}
-          </div>
-        </section>
-      ) : null}
 
       <section className="shrine-band">
         <div className="section-monument">
@@ -131,7 +110,7 @@ export default async function HomePage() {
           audited panel. Public anonymity is not a license to harm.
         </p>
         <div className="mt-10">
-          <Link href="/wall" className="btn btn-primary">
+          <Link href="/wall" className="btn btn-line">
             {event.phase === "archived" ? "Enter the archive" : "See The Wall"}
           </Link>
         </div>
@@ -174,7 +153,7 @@ function Step({ n, title, body }: { n: string; title: string; body: string }) {
   return (
     <div className="rite-step">
       <p className="rite-num">{n}</p>
-      <h3 className="mt-5 font-display text-2xl leading-tight text-paper sm:text-3xl">{title}</h3>
+      <h3 className="rite-title">{title}</h3>
       <p className="mt-3 text-sm leading-relaxed text-mist">{body}</p>
     </div>
   );

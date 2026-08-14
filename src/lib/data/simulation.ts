@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { MessageSort } from "@/lib/constants";
 import { ARCHIVAL_REMOVAL_TEXT, ARCHIVAL_TAGLINE, PAYMENT_INTENT_TTL_SECONDS, PRICE_USDC } from "@/lib/constants";
-import { hashOwnershipSecret, sha256Hex, tokensEqual } from "@/lib/crypto";
+import { createWallKey, hashOwnershipSecret, hashWallKey, sha256Hex, tokensEqual } from "@/lib/crypto";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { getNetwork, getTreasuryAddress, isArchiveSimulation } from "@/lib/env";
 import { bindMessageHash } from "@/lib/payment/fulfillment";
@@ -81,11 +81,14 @@ const extraWrites: ExtraWrite[] = [];
 const intents = new Map<string, SimIntent>();
 let archiveSnapshot: SimulatedArchive | null = null;
 let closedOverride: boolean | null = null;
+let endsAtOverride: string | null = null;
 let persistLoaded = false;
 
 const HOUR_MS = 60 * 60 * 1000;
 const WINDOW_MS = 24 * HOUR_MS;
 const ELAPSED_MS = 6 * HOUR_MS;
+export const SIMULATION_HURRY_MS = 10 * 60 * 1000;
+export const SIMULATION_MARK_TEXT = "I paid a dollar so this sentence would stay.";
 
 function shouldPersist(): boolean {
   return (
@@ -113,8 +116,10 @@ function ensureLoaded() {
       fires?: [string, number][];
       reactors?: string[];
       archive?: SimulatedArchive | null;
+      endsAt?: string | null;
     };
     closedOverride = raw.closed ?? null;
+    endsAtOverride = raw.endsAt ?? null;
     extraWrites.splice(0, extraWrites.length, ...(raw.writes ?? []));
     extraFires.clear();
     for (const [id, count] of raw.fires ?? []) extraFires.set(id, count);
@@ -144,6 +149,7 @@ function persist() {
         fires: [...extraFires.entries()],
         reactors: [...simulatedReactors],
         archive: archiveSnapshot,
+        endsAt: endsAtOverride,
       }),
     );
   } catch {
@@ -158,6 +164,7 @@ export function resetSimulationState() {
   intents.clear();
   archiveSnapshot = null;
   closedOverride = null;
+  endsAtOverride = null;
   persistLoaded = true;
   if (shouldPersist()) {
     try {
@@ -196,7 +203,75 @@ export function reopenSimulatedWall() {
   ensureLoaded();
   closedOverride = false;
   archiveSnapshot = null;
+  endsAtOverride = null;
   persist();
+}
+
+function liveWindow(now: Date): { startsAt: string; endsAt: string } {
+  if (endsAtOverride) {
+    const ends = new Date(endsAtOverride);
+    return {
+      startsAt: new Date(ends.getTime() - WINDOW_MS).toISOString(),
+      endsAt: ends.toISOString(),
+    };
+  }
+  return {
+    startsAt: new Date(now.getTime() - ELAPSED_MS).toISOString(),
+    endsAt: new Date(now.getTime() + (WINDOW_MS - ELAPSED_MS)).toISOString(),
+  };
+}
+
+export function hurrySimulatedClock(ms: number = SIMULATION_HURRY_MS) {
+  ensureLoaded();
+  if (isSimulatedWallClosed()) {
+    throw new AppError(ERROR_CODES.EVENT_ENDED, "The Wall is closed.", 403);
+  }
+  endsAtOverride = new Date(Date.now() + Math.max(1_000, ms)).toISOString();
+  persist();
+  return endsAtOverride;
+}
+
+export function publishSimulatedMark(text: string = SIMULATION_MARK_TEXT) {
+  ensureLoaded();
+  const wallKey = createWallKey();
+  const checkout = createSimulatedIntent({
+    text,
+    userId: "local-sim-mark",
+    claimSecretHash: hashWallKey(wallKey),
+  });
+  const published = fulfillSimulatedPayment({
+    intentId: checkout.intentId,
+    userId: "local-sim-mark",
+    paymentId: checkout.simulatedPaymentId,
+  });
+  return { ...published, wallKey };
+}
+
+export function warmSimulatedFires(count = 4) {
+  ensureLoaded();
+  if (isSimulatedWallClosed()) {
+    throw new AppError(ERROR_CODES.EVENT_ENDED, "The Wall is closed.", 403);
+  }
+  const targets = simulatedMessageList()
+    .filter((message) => !message.isRemoved)
+    .slice(0, Math.max(1, count));
+  const warmed: number[] = [];
+  for (const message of targets) {
+    warmed.push(addSimulatedReaction(message.id, `local-sim-warm-${randomUUID()}`));
+  }
+  return { count: warmed.length, totals: warmed };
+}
+
+export function runFullSimulation() {
+  resetSimulationState();
+  const published = publishSimulatedMark();
+  const fires = warmSimulatedFires();
+  const endsAt = hurrySimulatedClock();
+  return {
+    publicNumber: published.publicNumber,
+    endsAt,
+    fires: fires.count,
+  };
 }
 
 /** Frozen ledger written when this Wall closes. Null while live. */
@@ -251,13 +326,15 @@ function extraPublishedAt(write: ExtraWrite, anchor: Date, now: Date): string {
 
 export function simulatedLiveEvent(now: Date = new Date()): EventSnapshot {
   const messages = simulatedMessageList(now);
+  const window = liveWindow(now);
+  const remaining = Date.parse(window.endsAt) - now.getTime();
   return {
     ...snapshotMeta(),
-    startsAt: new Date(now.getTime() - ELAPSED_MS).toISOString(),
-    endsAt: new Date(now.getTime() + (WINDOW_MS - ELAPSED_MS)).toISOString(),
+    startsAt: window.startsAt,
+    endsAt: window.endsAt,
     archivedAt: null,
     finalizedAt: null,
-    phase: "live",
+    phase: remaining <= 0 ? "finalizing" : "live",
     serverNow: now.toISOString(),
     totalMessages: messages.length,
     totalReactions: messages.reduce((sum, message) => sum + message.reactionCount, 0),

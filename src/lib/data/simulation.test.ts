@@ -8,9 +8,12 @@ import {
   fulfillSimulatedPayment,
   getSimulatedArchive,
   getSimulatedMessage,
+  hurrySimulatedClock,
   listSimulatedMessages,
   lookupSimulatedCertificate,
+  publishSimulatedMark,
   resetSimulationState,
+  runFullSimulation,
   simulatedArchivedEvent,
   simulatedLiveEvent,
 } from "@/lib/data/simulation";
@@ -151,6 +154,30 @@ describe("live simulation", () => {
     expect(certificate?.text).toMatch(/local chamber/i);
     expect(certificate?.finalRank).toBe(frozen.finalRank);
     expect(lookupSimulatedCertificate("7K9P-X4MF-82QH-K3R2")).toBeNull();
+  });
+
+  it("runs countdown, payment, fire, and finish in one local loop", () => {
+    const loop = runFullSimulation();
+    expect(loop.publicNumber).toBe(19);
+    expect(getSimulatedMessage(19).text).toMatch(/paid a dollar/i);
+    expect(currentSimulatedEvent().phase).toBe("live");
+    const remaining = Date.parse(currentSimulatedEvent().endsAt) - Date.now();
+    expect(remaining).toBeGreaterThan(8 * 60 * 1000);
+    expect(remaining).toBeLessThan(11 * 60 * 1000);
+    expect(currentSimulatedEvent().totalReactions).toBeGreaterThan(401);
+    expect(loop.fires).toBe(4);
+
+    closeSimulatedWall();
+    expect(currentSimulatedEvent().phase).toBe("archived");
+    expect(getSimulatedArchive()?.messages.some((message) => message.publicNumber === 19)).toBe(true);
+  });
+
+  it("hurries the clock and publishes a paid sentence without a wallet", () => {
+    const endsAt = hurrySimulatedClock(45_000);
+    expect(Date.parse(endsAt) - Date.now()).toBeLessThan(50_000);
+    const paid = publishSimulatedMark();
+    expect(paid.publicNumber).toBe(19);
+    expect(paid.wallKey.length).toBeGreaterThan(8);
   });
 
   it("treats a missing Supabase config as simulation", () => {

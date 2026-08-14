@@ -29,7 +29,7 @@ export async function loadPreview(event: EventSnapshot): Promise<PublicMessage[]
     const { messages } = await listMessages({
       eventId: event.id,
       sort: "trending",
-      limit: 6,
+      limit: 12,
     });
     return messages;
   } catch {

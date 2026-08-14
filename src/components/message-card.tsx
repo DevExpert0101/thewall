@@ -54,8 +54,8 @@ export const MessageCard = memo(function MessageCard({
       </div>
       <p
         className={cn(
-          "font-display leading-[1.15] text-paper",
-          featured ? "text-[1.65rem] sm:text-4xl" : dense ? "text-[1.2rem] sm:text-xl" : "text-xl sm:text-2xl",
+          "message-text font-display text-paper",
+          featured ? "message-text-featured" : dense ? "message-text-dense" : "message-text-card",
           message.isRemoved && "text-ash italic",
         )}
       >
