@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MessageCard } from "@/components/message-card";
 import { WallSkeleton } from "@/components/wall-skeleton";
-import { parsePublicNumber } from "@/lib/utils";
+import { editionNumberOf, parsePublicNumber } from "@/lib/utils";
 import { WALL_PAGE_SIZE } from "@/lib/wall/constants";
 import type { EventSnapshot, PublicMessage } from "@/lib/types";
 
@@ -35,6 +35,9 @@ export function ArchiveBrowser({ event, initial, initialCursor = null }: Props) 
       });
       if (input.q) params.set("q", input.q);
       if (input.nextCursor) params.set("cursor", input.nextCursor);
+      if (event.editionNumber || event.phase === "archived") {
+        params.set("edition", String(editionNumberOf(event)));
+      }
       const res = await fetch(`/api/messages?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) {
@@ -71,15 +74,15 @@ export function ArchiveBrowser({ event, initial, initialCursor = null }: Props) 
     <div>
       <form className="mt-10" onSubmit={onSearch}>
         <label className="block">
-          <span className="kicker">Search by number</span>
+          <span className="kicker">Search by number or words</span>
           <div className="mt-2 flex flex-wrap gap-2">
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="#004291"
-              inputMode="numeric"
+              placeholder="#004291 or a phrase"
+              inputMode="search"
               autoComplete="off"
-              aria-invalid={Boolean(draft.trim() && !parsePublicNumber(draft))}
+              aria-invalid={Boolean(draft.trim().startsWith("#") && !parsePublicNumber(draft))}
               className="field min-w-[10rem] flex-1 font-mono text-sm"
             />
             <button type="submit" className="btn btn-line shrink-0 px-4">
@@ -126,12 +129,12 @@ export function ArchiveBrowser({ event, initial, initialCursor = null }: Props) 
       {miss ? (
         <div className="empty-monument mt-10">
           <p className="font-display text-3xl">
-            {n ? `No ${String(n).padStart(6, "0")}.` : "Not a number."}
+            {n ? `No ${String(n).padStart(6, "0")}.` : "No match."}
           </p>
           <p className="lede mx-auto mt-4 max-w-md">
             {n
-              ? "That number is not on this Wall. The archive only holds this day."
-              : "Search looks like #004291 — six digits, nothing else."}
+              ? "That number is not in this edition."
+              : "No sentence in this edition contains those words."}
           </p>
         </div>
       ) : null}

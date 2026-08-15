@@ -3,7 +3,7 @@
 import { SharePanel } from "@/components/share-panel";
 import { ARCHIVAL_REMOVAL_TEXT } from "@/lib/constants";
 import { sharePayloadForMessage } from "@/lib/share/copy";
-import { formatCount, formatPublicNumber, formatUtcTime } from "@/lib/utils";
+import { formatCount, formatEditionNumber, formatPublicNumber, formatUtcTime } from "@/lib/utils";
 import type { CertificatePayload } from "@/lib/types";
 
 export function CertificateView({
@@ -32,7 +32,11 @@ export function CertificateView({
       <article className="certificate-sheet mx-auto flex min-h-[80dvh] max-w-3xl flex-col justify-between border border-line p-8 sm:p-14 print:min-h-[auto] print:max-w-none print:border-2 print:border-black print:bg-white print:p-16">
         <header>
           <p className="kicker print:text-neutral-600">Certificate</p>
-          <p className="mt-3 font-display text-2xl text-paper print:text-black">{data.eventTitle}</p>
+          <p className="mt-3 font-display text-2xl text-paper print:text-black">
+            {data.editionNumber
+              ? `${data.eventTitle} ${formatEditionNumber(data.editionNumber)}`
+              : data.eventTitle}
+          </p>
           <p className="mt-2 text-sm text-mist print:text-neutral-700">{data.eventDate}</p>
         </header>
         <div>
@@ -53,6 +57,11 @@ export function CertificateView({
           </p>
         </div>
         <footer>
+          {typeof data.totalMessages === "number" ? (
+            <p className="mb-4 font-mono text-xs tracking-[0.14em] text-mist print:text-neutral-700">
+              {formatCount(data.totalMessages)} people spoke that day. This was one of them.
+            </p>
+          ) : null}
           <p className="kicker text-mist print:text-neutral-700">
             {data.tagline}
           </p>

@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 
   try {
     const event = await loadEvent();
-    const messageMatch = path.match(/^\/message\/(\d{1,8})$/);
+    const messageMatch = path.match(/^\/(?:message|archive\/\d{1,6})\/(\d{1,8})$/);
     if (messageMatch) {
       const n = parsePublicNumber(messageMatch[1] ?? "");
       if (n) {

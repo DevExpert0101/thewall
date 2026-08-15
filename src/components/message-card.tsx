@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import Link from "next/link";
-import { formatPublicNumber } from "@/lib/utils";
+import { editionMessagePath, editionNumberOf, formatPublicNumber } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { FireButton } from "@/components/fire-button";
 import { SharePanel } from "@/components/share-panel";
@@ -26,10 +26,13 @@ export const MessageCard = memo(function MessageCard({
   dense?: boolean;
   fresh?: boolean;
   featured?: boolean;
-  event?: Pick<EventSnapshot, "phase" | "endsAt" | "serverNow">;
+  event?: Pick<EventSnapshot, "phase" | "endsAt" | "serverNow" | "editionNumber">;
   onReacted?: (id: string, count: number) => void;
 }) {
-  const href = `/message/${message.publicNumber}`;
+  const href =
+    event && (event.phase === "archived" || event.phase === "finalizing")
+      ? editionMessagePath(editionNumberOf(event), message.publicNumber)
+      : `/message/${message.publicNumber}`;
   const payload = sharePayloadForMessage({
     event: event ?? { phase, endsAt: new Date(0).toISOString(), serverNow: new Date().toISOString() },
     message,

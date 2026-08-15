@@ -1290,6 +1290,17 @@ select.field {
     0 24px 80px rgb(var(--ember-rgb) / 0.28);
 }
 
+.monument-title[data-custom="true"] {
+  line-height: 0.95;
+}
+
+.monument-title[data-custom="true"] .monument-wall {
+  font-size: clamp(2.2rem, 8vw, 5.5rem);
+  letter-spacing: 0.08em;
+  text-align: center;
+  max-width: 16ch;
+}
+
 .monument-rule {
   width: 7.5rem;
   height: 2px;

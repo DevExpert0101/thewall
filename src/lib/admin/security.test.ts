@@ -7,6 +7,7 @@ const CLIENT_FILES = [
   "src/components/admin/dashboard.tsx",
   "src/components/admin/login-form.tsx",
   "src/components/admin/confirm-dialog.tsx",
+  "src/components/admin/wall-controls.tsx",
 ];
 
 describe("admin surface security", () => {

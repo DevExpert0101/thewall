@@ -5,6 +5,7 @@ insert into public.events (
   id,
   slug,
   title,
+  edition_number,
   starts_at,
   ends_at,
   configuration
@@ -13,6 +14,7 @@ values (
   'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
   'the-wall',
   'THE WALL',
+  1,
   now() + interval '1 hour',
   now() + interval '25 hours',
   jsonb_build_object(

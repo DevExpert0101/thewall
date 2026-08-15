@@ -70,7 +70,7 @@ describe("archive browser", () => {
     expect(screen.getByText(/rank #1/i)).toBeInTheDocument();
     expect(screen.getByText(ARCHIVAL_REMOVAL_TEXT)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /leave your mark/i })).not.toBeInTheDocument();
-    await user.type(screen.getByPlaceholderText("#004291"), "#000004");
+    await user.type(screen.getByPlaceholderText(/#004291/), "#000004");
     await user.click(screen.getByRole("button", { name: /^find$/i }));
     await waitFor(() => {
       expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("q=%23000004") || String(url).includes("q=#000004"))).toBe(true);

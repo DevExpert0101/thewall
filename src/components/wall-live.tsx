@@ -7,7 +7,7 @@ import { PublishDialog } from "@/components/publish-dialog";
 import { PrimaryCta } from "@/components/primary-cta";
 import { Countdown } from "@/components/countdown";
 import { WallSkeleton } from "@/components/wall-skeleton";
-import { formatCount, parsePublicNumber } from "@/lib/utils";
+import { formatCount, parsePublicNumber, wallTitle } from "@/lib/utils";
 import type { EventSnapshot, PublicMessage } from "@/lib/types";
 import type { MessageSort } from "@/lib/constants";
 import { WALL_PAGE_SIZE, WALL_PULSE_MS } from "@/lib/wall/constants";
@@ -295,6 +295,9 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
   const target = phase === "upcoming" ? event.startsAt : event.endsAt;
   const label =
     phase === "upcoming" ? "Until launch" : phase === "live" ? "Remaining" : "Closed";
+  const awaitingStart =
+    phase === "upcoming" &&
+    Date.parse(event.startsAt) - Date.parse(event.serverNow) > 7 * 24 * 60 * 60 * 1000;
 
   const emptyCopy = emptyMessage({
     phase,
@@ -308,6 +311,9 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
       <div className="wall-chrome sticky top-14 z-30 -mx-4 px-4 py-3 sm:top-16 sm:-mx-6 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
+            <p className="truncate font-display text-lg text-paper sm:text-xl">
+              {wallTitle(event)}
+            </p>
             {phase === "live" ? (
               <span className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-ember">
                 <span className="live-dot" aria-hidden="true" />
@@ -318,17 +324,21 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
                 {phase}
               </span>
             )}
-            <Countdown
-              targetIso={target}
-              serverNow={event.serverNow}
-              label={label}
-              phase={phase}
-              size="bar"
-              onZero={() => {
-                if (phase === "upcoming") applyRemotePhase("live");
-                if (phase === "live") applyRemotePhase("finalizing");
-              }}
-            />
+            {awaitingStart ? (
+              <span className="kicker">Not yet open</span>
+            ) : (
+              <Countdown
+                targetIso={target}
+                serverNow={event.serverNow}
+                label={label}
+                phase={phase}
+                size="bar"
+                onZero={() => {
+                  if (phase === "upcoming") applyRemotePhase("live");
+                  if (phase === "live") applyRemotePhase("finalizing");
+                }}
+              />
+            )}
           </div>
           <p className="font-mono text-[0.7rem] tracking-[0.08em] text-bronze sm:text-xs">
             {formatCount(totals.messages)} sentences · {formatCount(totals.reactions)} 🔥
@@ -367,16 +377,16 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
         <form className="block flex-1" onSubmit={submitSearch}>
           <label className="block">
             <span className="kicker">
-              Search by number
+              Search by number or words
             </span>
             <div className="mt-2 flex flex-wrap gap-2">
               <input
                 value={draftQuery}
                 onChange={(e) => setDraftQuery(e.target.value)}
-                placeholder="#004291"
-                inputMode="numeric"
+                placeholder="#004291 or a phrase"
+                inputMode="search"
                 autoComplete="off"
-                aria-invalid={Boolean(draftQuery.trim() && !parsePublicNumber(draftQuery))}
+                aria-invalid={Boolean(draftQuery.trim().startsWith("#") && !parsePublicNumber(draftQuery))}
                 className="field min-w-[10rem] flex-1 font-mono text-sm"
               />
               <button
@@ -552,16 +562,16 @@ function emptyMessage(input: {
   if (input.phase === "upcoming") {
     return {
       title: "Blank stone.",
-      body: "The Wall has not opened. Come back when the countdown reaches zero.",
+      body: "The Wall has not opened. A steward starts the day from the stewardship console.",
     };
   }
   if (input.searching) {
     const n = parsePublicNumber(input.query);
     return {
-      title: n ? `No ${String(n).padStart(6, "0")}.` : "Not a number.",
+      title: n ? `No ${String(n).padStart(6, "0")}.` : "No match.",
       body: n
         ? "That number is not on this Wall. Try another, or wander the feeds."
-        : "Search looks like #004291 — six digits, nothing else.",
+        : "No sentence on this Wall contains those words.",
     };
   }
   if (input.sort === "hour") {

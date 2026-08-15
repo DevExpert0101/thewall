@@ -70,8 +70,11 @@ export function AdminConfirmDialog({
           {title}
         </h2>
         <p className="mt-2 text-sm text-mist">
-          {publicNumber ? `${formatPublicNumber(publicNumber)} stays numbered.` : "This writes to the audit log."}{" "}
-          Destructive work needs a reason and the confirmation phrase.
+          {publicNumber
+            ? `${formatPublicNumber(publicNumber)} stays on the Wall.`
+            : "This writes to the audit log."}{" "}
+          After seal, a removal is a redaction. Give a reason and the confirmation
+          phrase.
         </p>
         <label className="mt-5 block text-[11px] uppercase tracking-[0.16em] text-ash">
           Reason

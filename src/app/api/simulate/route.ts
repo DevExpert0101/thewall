@@ -4,11 +4,14 @@ import {
   hurrySimulatedClock,
   isSimulatedWallClosed,
   publishSimulatedMark,
+  listSimulatedEditions,
   reopenSimulatedWall,
-  resetSimulationState,
+  resetLiveSimulation,
   runFullSimulation,
   warmSimulatedFires,
 } from "@/lib/data/simulation";
+import { markSimulatedClosed } from "@/lib/data/simulation-session";
+import { requireAdmin } from "@/lib/auth";
 import { isSimulation } from "@/lib/env";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { jsonError, jsonOk, readJson } from "@/lib/http";
@@ -35,6 +38,8 @@ function snapshot() {
     serverNow: event.serverNow,
     totalMessages: event.totalMessages,
     totalReactions: event.totalReactions,
+    editionNumber: event.editionNumber ?? listSimulatedEditions().at(-1)?.editionNumber ?? 1,
+    editionCount: listSimulatedEditions().length,
   };
 }
 
@@ -50,15 +55,28 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     requireSimulation();
+    await requireAdmin();
     const body = bodySchema.parse(await readJson(request));
     let published: { publicNumber: number } | undefined;
-    if (body.action === "reset") resetSimulationState();
-    if (body.action === "reopen") reopenSimulatedWall();
-    if (body.action === "close") closeSimulatedWall();
+    if (body.action === "reset") {
+      resetLiveSimulation();
+      await markSimulatedClosed(false);
+    }
+    if (body.action === "reopen") {
+      reopenSimulatedWall();
+      await markSimulatedClosed(false);
+    }
+    if (body.action === "close") {
+      closeSimulatedWall();
+      await markSimulatedClosed(true);
+    }
     if (body.action === "hurry") hurrySimulatedClock();
     if (body.action === "mark") published = publishSimulatedMark();
     if (body.action === "warm") warmSimulatedFires();
-    if (body.action === "all") published = runFullSimulation();
+    if (body.action === "all") {
+      published = runFullSimulation();
+      await markSimulatedClosed(false);
+    }
     return jsonOk({
       ...snapshot(),
       publicNumber: published?.publicNumber,

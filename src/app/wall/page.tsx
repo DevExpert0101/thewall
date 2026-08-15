@@ -3,9 +3,10 @@ import { WallLive } from "@/components/wall-live";
 import { loadEvent, loadPreview } from "@/lib/data/load";
 import { listMessages } from "@/lib/data/messages";
 import { publicPageMetadata } from "@/lib/share/metadata";
+import { wallTitle } from "@/lib/utils";
 import { WALL_PAGE_SIZE } from "@/lib/wall/constants";
 
-export const revalidate = 5;
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const event = await loadEvent();
@@ -30,10 +31,8 @@ export default async function WallPage() {
 
   return (
     <main className="py-6">
-      <h1 className="sr-only">The Wall</h1>
-      <p className="wall-enter" aria-hidden="true">
-        THE WALL
-      </p>
+      <h1 className="sr-only">{wallTitle(event)}</h1>
+      <p className="wall-enter">{wallTitle(event)}</p>
       <WallLive event={event} initial={initial} initialCursor={initialCursor} />
     </main>
   );

@@ -41,7 +41,7 @@ values (
 on conflict (slug) do nothing;
 ```
 
-The counter row is created by trigger. Do not seed fake messages.
+The counter row and `edition_number` are created by trigger. Do not seed fake messages or invented past editions.
 
 8. Create the operator Auth user (email + password) and either:
    - set `ADMIN_EMAILS` to that email, or

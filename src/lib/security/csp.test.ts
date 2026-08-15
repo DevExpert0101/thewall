@@ -11,10 +11,14 @@ describe("content security policy", () => {
     expect(header).toContain("challenges.cloudflare.com");
     expect(header).not.toMatch(/SERVICE_ROLE|TURNSTILE_SECRET|eyJ/);
     expect(header).not.toContain("unsafe-eval");
+    expect(header).toContain("style-src 'self' 'unsafe-inline'");
+    expect(header).not.toMatch(/style-src [^;]*nonce/);
   });
 
   it("allows eval only in development", () => {
     expect(contentSecurityPolicy("n", true)).toContain("unsafe-eval");
+    expect(contentSecurityPolicy("n", true)).toContain("unsafe-inline");
+    expect(contentSecurityPolicy("n", true)).not.toContain("strict-dynamic");
   });
 });
 

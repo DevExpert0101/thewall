@@ -34,7 +34,7 @@ export async function verifyMessageClaim(input: {
     throw new AppError(ERROR_CODES.CLAIM_INVALID, "That Wall Key is not valid.", 404);
   }
 
-  if (isSimulation() || input.eventId === "local" || !hasSupabaseConfig()) {
+  if (isSimulation() || input.eventId === "local" || input.eventId.startsWith("local-") || !hasSupabaseConfig()) {
     return verifySimulatedClaim({
       publicNumber: input.publicNumber,
       wallKey: input.wallKey,

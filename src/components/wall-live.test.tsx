@@ -108,7 +108,7 @@ describe("live wall", () => {
   it("searches by public number and recovers from a miss", async () => {
     const user = userEvent.setup();
     render(<WallLive event={event} initial={[message(4)]} />);
-    await user.type(screen.getByPlaceholderText("#004291"), "#000099");
+    await user.type(screen.getByPlaceholderText(/#004291/), "#000099");
     await user.click(screen.getByRole("button", { name: /^find$/i }));
     expect(await screen.findByText(/no 000099/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^clear$/i }));

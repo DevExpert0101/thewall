@@ -6,12 +6,22 @@ import { consumeRateLimit } from "@/lib/data/rate-limit";
 import { clientIpHashForLimit, hashIp } from "@/lib/abuse/ip";
 import { ABUSE_LIMITS, rateLimitKey } from "@/lib/abuse/keys";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { localAdminCredentialsMatch, localAdminEmail, localAdminEnabled, markLocalAdmin } from "@/lib/admin/local";
 import { hasSupabaseConfig } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
+    if (localAdminEnabled()) {
+      const body = adminLoginSchema.parse(await readJson(request));
+      if (!localAdminCredentialsMatch(body.email, body.password)) {
+        throw new AppError(ERROR_CODES.FORBIDDEN, "Sign-in failed.", 401);
+      }
+      await markLocalAdmin(true);
+      return jsonOk({ email: localAdminEmail() });
+    }
+
     if (!hasSupabaseConfig()) {
       throw new AppError(ERROR_CODES.CONFIG, "Administrator sign-in is not configured.", 503);
     }

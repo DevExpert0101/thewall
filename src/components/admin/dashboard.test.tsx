@@ -22,8 +22,18 @@ const overview: AdminOverview = {
     priceUsdc: "1.00",
     totalMessages: 2,
     totalReactions: 1,
+    editionNumber: 1,
+    archiveHash: null,
+    merkleRoot: null,
+    archiveUri: null,
+    proofTx: null,
+    windowMinutes: 1440,
+    remainingMinutes: 720,
   },
   totals: { messages: 2, reactions: 1, usdc: 2 },
+  simulation: false,
+  editions: [],
+  feedback: [],
   recentFailures: [],
   openReports: [
     {
@@ -60,18 +70,44 @@ const overview: AdminOverview = {
 };
 
 describe("admin dashboard", () => {
-  it("shows operational sections without an event editor or secret material", () => {
+  it("lets a steward configure this Wall without exposing secret material", () => {
     const { container } = render(<AdminDashboard initial={overview} email="ops@example.com" />);
-    expect(screen.getByText(/event overview/i)).toBeInTheDocument();
-    expect(screen.getByText(/event configuration/i)).toBeInTheDocument();
+    expect(screen.getByText(/current edition/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /this wall/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^title$/i)).toHaveValue("THE WALL");
+    expect(screen.getByRole("button", { name: /save this wall/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /finish this wall/i })).toBeInTheDocument();
+    expect(screen.getByText(/archive library/i)).toBeInTheDocument();
     expect(screen.getByText(/message search/i)).toBeInTheDocument();
     expect(screen.getByText(/reports queue/i)).toBeInTheDocument();
+    expect(screen.getByText(/visitor notes/i)).toBeInTheDocument();
     expect(screen.getByText(/moderation audit log/i)).toBeInTheDocument();
     expect(screen.getByText(/payment lookup/i)).toBeInTheDocument();
     expect(screen.getByText(/system health/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /save event/i })).not.toBeInTheDocument();
     expect(container.textContent).not.toMatch(/eyJ|SERVICE_ROLE|sk_live/);
-    expect(screen.getByText(/preview only/i)).toBeInTheDocument();
+    expect(screen.queryByText(/preview only/i)).not.toBeInTheDocument();
+  });
+
+  it("saves title and clock through the admin event route", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>((input) => {
+      const url = String(input);
+      const body = url.includes("/api/admin/stats") ? overview : { event: overview.config };
+      return Promise.resolve(
+        new Response(JSON.stringify(body), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdminDashboard initial={overview} email="ops@example.com" />);
+    await user.clear(screen.getByLabelText(/^title$/i));
+    await user.type(screen.getByLabelText(/^title$/i), "THE WALL №002");
+    await user.click(screen.getByRole("button", { name: /save this wall/i }));
+    expect(fetchMock).toHaveBeenCalled();
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("/api/admin/event");
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body ?? "")).toMatch(/THE WALL №002/);
+    vi.unstubAllGlobals();
   });
 
   it("requires confirmation before a removal can be submitted", async () => {

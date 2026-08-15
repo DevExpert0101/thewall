@@ -457,7 +457,6 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
               endsAt={endsAt}
               serverNow={serverNow}
               ownershipToken={result.ownershipToken}
-              simulation={Boolean(prepared?.simulated)}
             />
           ) : null}
 

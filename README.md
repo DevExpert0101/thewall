@@ -2,7 +2,7 @@
 
 One day. One dollar. One sentence forever.
 
-A 24-hour anonymous monument: anyone can read it, 1.00 USDC on Base publishes one 140-character sentence, and when the clock reaches zero the wall becomes permanently read-only.
+A 24-hour anonymous monument: anyone can read it, 1.00 USDC on Base publishes one 140-character sentence, and when the clock reaches zero that day is sealed as a numbered edition in the Archive.
 
 This application is built for Vercel’s serverless model. There is no long-running Node process, no custom WebSocket server, and no Redis. Supabase holds data, auth, RLS, Realtime, and atomic SQL.
 
@@ -41,11 +41,11 @@ Documented in `src/lib/ranking.ts`.
 
 ## Local setup
 
-1. Copy `.env.example` to `.env.local`. Leave the Supabase fields blank to use the built-in local Wall. Pay, publish, and certificates run in-process — no chain and no real USDC. Use **Finish this Wall** in the header (or after publish) to freeze this same day into `/archive`. Fill Supabase fields only when you have a real project.
+1. Copy `.env.example` to `.env.local`. Leave the Supabase fields blank to use the built-in local Wall. Pay, publish, and certificates run in-process — no chain and no real USDC. Use **Finish this Wall** in the header (or after publish) to seal this day as edition №001 in `/archive`. Fill Supabase fields only when you have a real project.
 2. Create a Supabase project.
 3. Enable **Anonymous sign-ins** (Authentication → Providers).
 4. Apply every file in `supabase/migrations/` in filename order (SQL editor or `supabase db push`).
-5. For a live local window, insert one event row (see `DEPLOYMENT.md`). Do not invent a previous Wall.
+5. For a live local window, insert one event row (see `DEPLOYMENT.md`). Do not invent sealed editions. The Archive lists only Walls that have actually closed.
 6. Insert your admin identity into `admin_users` (or set `ADMIN_EMAILS`) and create that Auth user.
 7. Cloudflare Turnstile: dummy keys in `.env.example` always pass and are for development only.
 8. `npm install` then `npm test` then `npm run dev`.

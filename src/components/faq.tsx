@@ -13,7 +13,7 @@ const ITEMS = [
   },
   {
     q: "What happens when time runs out?",
-    a: "Publishing and reactions stop immediately, even if a browser still shows a few seconds. This Wall becomes the archive. There is no previous Wall to browse.",
+    a: "Publishing and reactions stop immediately, even if a browser still shows a few seconds. This Wall is sealed as a numbered edition in the Archive. Future Walls become later editions. The conversation ends; the record remains.",
   },
   {
     q: "Can I get a refund?",

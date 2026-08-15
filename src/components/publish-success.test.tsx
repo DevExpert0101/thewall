@@ -31,7 +31,7 @@ describe("publish success", () => {
     expect(screen.queryByRole("button", { name: /finish this wall and open the archive/i })).not.toBeInTheDocument();
   });
 
-  it("offers a local finish-and-archive path in simulation", () => {
+  it("does not finish the Wall from the public success screen", () => {
     render(
       <PublishSuccess
         publicNumber={19}
@@ -39,9 +39,8 @@ describe("publish success", () => {
         endsAt="2026-08-13T18:00:00.000Z"
         serverNow="2026-08-13T00:17:51.000Z"
         ownershipToken={KEY}
-        simulation
       />,
     );
-    expect(screen.getByRole("button", { name: /finish this wall and open the archive/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /finish this wall/i })).not.toBeInTheDocument();
   });
 });

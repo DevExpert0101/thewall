@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { TAGLINE } from "@/lib/constants";
 import { serializeJsonLd } from "@/lib/security/csp";
-import { siteUrl } from "@/lib/utils";
+import { siteUrl, wallTitle } from "@/lib/utils";
 import type { EventSnapshot } from "@/lib/types";
 
 export async function JsonLd({ event }: { event: EventSnapshot }) {
@@ -9,7 +9,7 @@ export async function JsonLd({ event }: { event: EventSnapshot }) {
   const data = {
     "@context": "https://schema.org",
     "@type": "Event",
-    name: "THE WALL",
+    name: wallTitle(event),
     description: TAGLINE,
     startDate: event.startsAt,
     endDate: event.endsAt,

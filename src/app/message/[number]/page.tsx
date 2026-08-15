@@ -10,7 +10,7 @@ import { getMessageByNumber } from "@/lib/data/messages";
 import { TAGLINE } from "@/lib/constants";
 import { sharePayloadForMessage } from "@/lib/share/copy";
 import { publicMessageMetadata } from "@/lib/share/metadata";
-import { formatCount, formatPublicNumber, formatUtcDate, formatUtcTime, parsePublicNumber } from "@/lib/utils";
+import { editionNumberOf, editionPath, formatCount, formatPublicNumber, formatUtcDate, formatUtcTime, parsePublicNumber } from "@/lib/utils";
 
 export const revalidate = 5;
 
@@ -59,7 +59,14 @@ export default async function MessagePage({ params }: Props) {
         reactionCount={message.reactionCount}
         finalRank={message.finalRank}
       />
-      <Link href={event.phase === "live" || event.phase === "upcoming" ? "/wall" : "/archive"} className="kicker hover:text-paper">
+      <Link
+        href={
+          event.phase === "live" || event.phase === "upcoming"
+            ? "/wall"
+            : editionPath(editionNumberOf(event))
+        }
+        className="kicker hover:text-paper"
+      >
         {event.phase === "live" || event.phase === "upcoming" ? "← The Wall" : "← Archive"}
       </Link>
       <p className="mt-8 font-mono text-sm tracking-[0.22em] text-bronze">

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createWallKey, hashWallKey } from "@/lib/crypto";
 import {
+  addSimulatedFeedback,
   addSimulatedReaction,
   closeSimulatedWall,
   createSimulatedIntent,
@@ -8,10 +9,17 @@ import {
   fulfillSimulatedPayment,
   getSimulatedArchive,
   getSimulatedMessage,
+  getSimulatedEdition,
+  listSimulatedEditions,
+  listSimulatedFeedback,
+  configureSimulatedWall,
+  holdSimulatedWall,
   hurrySimulatedClock,
   listSimulatedMessages,
+  startSimulatedWall,
   lookupSimulatedCertificate,
   publishSimulatedMark,
+  reopenSimulatedWall,
   resetSimulationState,
   runFullSimulation,
   simulatedArchivedEvent,
@@ -95,9 +103,46 @@ describe("live simulation", () => {
     const live = simulatedLiveEvent(new Date("2026-08-13T18:00:00Z"));
     expect(live.phase).toBe("live");
     expect(live.archivedAt).toBeNull();
+    expect(listSimulatedEditions()).toEqual([]);
     expect(
       listSimulatedMessages({ sort: "hot", limit: 3 }).messages.every((message) => message.finalRank === null),
     ).toBe(true);
+  });
+
+  it("keeps each finished simulation as its own sealed edition", () => {
+    closeSimulatedWall(new Date("2026-08-13T18:00:00Z"));
+    expect(listSimulatedEditions()).toHaveLength(1);
+    reopenSimulatedWall();
+    expect(currentSimulatedEvent().phase).toBe("live");
+    expect(listSimulatedEditions()).toHaveLength(1);
+    expect(listSimulatedEditions()[0]?.editionNumber).toBe(1);
+    publishSimulatedMark("Second day, same stone.");
+    closeSimulatedWall(new Date("2026-08-14T18:00:00Z"));
+    const editions = listSimulatedEditions();
+    expect(editions).toHaveLength(2);
+    expect(editions.map((edition) => edition.editionNumber)).toEqual([1, 2]);
+    expect(editions[1]?.totalMessages).toBeGreaterThan(editions[0]?.totalMessages ?? 0);
+    expect(getSimulatedEdition(1)?.messages.some((message) => message.publicNumber === 19)).toBe(false);
+    expect(getSimulatedEdition(2)?.messages.some((message) => message.text.includes("Second day"))).toBe(true);
+    reopenSimulatedWall();
+    expect(currentSimulatedEvent().phase).toBe("live");
+    expect(listSimulatedEditions()).toHaveLength(2);
+  });
+
+  it("seals this Wall as edition №001 with a canonical proof", () => {
+    closeSimulatedWall(new Date("2026-08-13T18:00:00Z"));
+    const editions = listSimulatedEditions();
+    expect(editions).toHaveLength(1);
+    expect(editions[0]?.editionNumber).toBe(1);
+    expect(editions[0]?.winning?.publicNumber).toBe(4);
+    expect(editions[0]?.archiveHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(editions[0]?.merkleRoot).toMatch(/^[0-9a-f]{64}$/);
+    expect(editions.some((edition) => edition.editionNumber === 2)).toBe(false);
+    const listed = listSimulatedMessages({ sort: "hot", limit: 48 }).messages;
+    expect(listed[0]?.publicNumber).toBe(4);
+    expect(listed.find((message) => message.publicNumber === 8)?.text).toBe(
+      "Message removed under archive policy.",
+    );
   });
 
   it("treats archive simulation as this Wall frozen, not a second event", () => {
@@ -178,6 +223,68 @@ describe("live simulation", () => {
     const paid = publishSimulatedMark();
     expect(paid.publicNumber).toBe(19);
     expect(paid.wallKey.length).toBeGreaterThan(8);
+  });
+
+  it("stores visitor notes off the public wall", () => {
+    addSimulatedFeedback({
+      body: "The type is too small on my phone.",
+      category: "product",
+      email: "reader@example.com",
+    });
+    const notes = listSimulatedFeedback();
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.body).toMatch(/too small/i);
+    expect(notes[0]?.email).toBe("reader@example.com");
+    const publicTexts = listSimulatedMessages({ sort: "new", limit: 40 }).messages.map((row) => row.text);
+    expect(publicTexts.join("\n")).not.toMatch(/too small/i);
+  });
+
+  it("keeps the public wall blank until a steward starts the day", () => {
+    const held = holdSimulatedWall();
+    expect(held.phase).toBe("upcoming");
+    expect(held.totalMessages).toBe(0);
+    expect(listSimulatedMessages({ sort: "new", limit: 20 }).messages).toEqual([]);
+    const opened = startSimulatedWall({ title: "OPENING DAY", durationMinutes: 30 });
+    expect(opened.phase).toBe("live");
+    expect(opened.title).toBe("OPENING DAY");
+    expect(listSimulatedMessages({ sort: "new", limit: 20 }).messages.length).toBeGreaterThan(0);
+  });
+
+  it("seals an expired live day into the archive instead of dropping it", () => {
+    startSimulatedWall({ title: "The first wall", durationMinutes: 5 });
+    configureSimulatedWall({
+      startsAt: "2026-08-15T01:00:00.000Z",
+      endsAt: "2026-08-15T01:05:00.000Z",
+    });
+    const sealed = currentSimulatedEvent(new Date("2026-08-15T01:06:00.000Z"));
+    expect(sealed.phase).toBe("archived");
+    expect(sealed.title).toBe("The first wall");
+    const editions = listSimulatedEditions();
+    expect(editions).toHaveLength(1);
+    expect(editions[0]?.title).toBe("The first wall");
+  });
+
+  it("lets stewardship set the title, duration, and remaining time", () => {
+    configureSimulatedWall({ title: "THE WALL №007", durationMinutes: 5 });
+    const named = currentSimulatedEvent();
+    expect(named.title).toBe("THE WALL №007");
+    expect(Date.parse(named.endsAt) - Date.parse(named.startsAt)).toBe(5 * 60_000);
+    expect(named.phase).toBe("live");
+    configureSimulatedWall({ remainingMinutes: 2 });
+    const hurried = currentSimulatedEvent();
+    expect(Date.parse(hurried.endsAt) - Date.now()).toBeLessThan(3 * 60_000);
+    expect(hurried.title).toBe("THE WALL №007");
+  });
+
+  it("starts a new live day after a seal without dropping the library", () => {
+    closeSimulatedWall();
+    expect(currentSimulatedEvent().phase).toBe("archived");
+    startSimulatedWall({ title: "THE NEXT DAY", durationMinutes: 15 });
+    const next = currentSimulatedEvent();
+    expect(next.phase).toBe("live");
+    expect(next.title).toBe("THE NEXT DAY");
+    expect(Date.parse(next.endsAt) - Date.parse(next.startsAt)).toBe(15 * 60_000);
+    expect(listSimulatedEditions()).toHaveLength(1);
   });
 
   it("treats a missing Supabase config as simulation", () => {

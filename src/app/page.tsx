@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
 import { Faq } from "@/components/faq";
+import { FeedbackForm } from "@/components/feedback-form";
 import { LandingHero } from "@/components/landing-hero";
 import { MessageCard } from "@/components/message-card";
 import { TAGLINE } from "@/lib/constants";
 import { loadEvent, loadPreview } from "@/lib/data/load";
 import { publicPageMetadata } from "@/lib/share/metadata";
-import { formatCount } from "@/lib/utils";
+import { formatCount, wallTitle } from "@/lib/utils";
 import type { Metadata } from "next";
 
-export const revalidate = 5;
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const event = await loadEvent();
@@ -74,7 +75,7 @@ export default async function HomePage() {
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             <Step n="01" title="Write 140 characters" body="One sentence. No name. No profile. No audience to perform for." />
             <Step n="02" title="Pay one dollar" body="1 USDC on Base, once. The wallet is not your name. Nothing else is sold." />
-            <Step n="03" title="It stays" body="When the clock dies, The Wall freezes. Your number is never reused." />
+            <Step n="03" title="It stays" body="When the clock dies, this Wall is sealed as a numbered edition. Your number is never reused on that day." />
           </div>
         </div>
       </section>
@@ -83,12 +84,12 @@ export default async function HomePage() {
         <div className="section-monument">
           <p className="kicker">Permanence</p>
           <h2 className="permanence-title">
-            A sentence you cannot unwrite, on a wall that cannot reopen.
+            A sentence you cannot unwrite, then born as history.
           </h2>
           <div className="pay-plaque shrine-plaque mt-12 max-w-lg p-7 sm:p-10">
             <p className="font-mono text-[0.7rem] tracking-[0.22em] text-bronze">MESSAGE #004291</p>
             <p className="mt-5 font-display text-2xl leading-snug text-paper sm:text-3xl">
-              “I hope whoever finds this in 50 years knows we were trying.”
+              “Sold the guitar in March. I still reach for it when a song comes on.”
             </p>
             <p className="mt-8 kicker">Final rank · 🔥 · published timestamp</p>
             <p className="mt-6 text-[0.65rem] uppercase tracking-[0.22em] text-mist">{TAGLINE}</p>
@@ -102,7 +103,7 @@ export default async function HomePage() {
         <Faq />
       </section>
 
-      <section id="safety" className="mx-auto max-w-3xl px-4 pb-28 sm:px-6">
+      <section id="safety" className="mx-auto max-w-3xl px-4 pb-16 sm:px-6">
         <p className="kicker">Safety</p>
         <p className="lede mt-5">
           Messages are published as plain text, never as HTML. Illegal content is
@@ -110,11 +111,13 @@ export default async function HomePage() {
           audited panel. Public anonymity is not a license to harm.
         </p>
         <div className="mt-10">
-          <Link href="/wall" className="btn btn-line">
-            {event.phase === "archived" ? "Enter the archive" : "See The Wall"}
+            <Link href={event.phase === "archived" ? "/archive" : "/wall"} className="btn btn-line">
+            {event.phase === "archived" ? "Enter the archive" : `See ${wallTitle(event)}`}
           </Link>
         </div>
       </section>
+
+      <FeedbackForm />
     </main>
   );
 }
