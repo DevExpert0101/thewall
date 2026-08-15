@@ -88,8 +88,14 @@ export async function lookupCertificate(token: string): Promise<CertificatePaylo
 
   const { data: event } = await db
     .from("events")
-    .select("title, starts_at")
+    .select("title, starts_at, edition_number")
     .eq("id", message.event_id)
+    .maybeSingle();
+
+  const { data: counters } = await db
+    .from("event_counters")
+    .select("total_messages")
+    .eq("event_id", message.event_id)
     .maybeSingle();
 
   return {
@@ -101,5 +107,7 @@ export async function lookupCertificate(token: string): Promise<CertificatePaylo
     eventTitle: event?.title ?? "THE WALL",
     eventDate: formatUtcDate(event?.starts_at ?? message.published_at),
     tagline: ARCHIVAL_TAGLINE,
+    editionNumber: event?.edition_number ?? 1,
+    totalMessages: counters?.total_messages ?? undefined,
   };
 }

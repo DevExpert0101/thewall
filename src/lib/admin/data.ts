@@ -1,7 +1,11 @@
 import "server-only";
 
+import { listVisitorFeedback } from "@/lib/data/feedback";
 import { eventSlug, getEventSnapshot } from "@/lib/data/event";
-import { getNetwork, hasSupabaseConfig } from "@/lib/env";
+import { listSealedEditions } from "@/lib/data/editions";
+import { getSimulatedMessage, listSimulatedMessages } from "@/lib/data/simulation";
+import { getNetwork, hasSupabaseConfig, isSimulation } from "@/lib/env";
+import { editionNumberOf, parsePublicNumber } from "@/lib/utils";
 import { createServiceSupabase } from "@/lib/supabase/admin";
 import { buildAdminHealth, truncateWallet } from "@/lib/admin/sanitize";
 import type {
@@ -12,7 +16,6 @@ import type {
   AdminPaymentHit,
   AdminReportRow,
 } from "@/lib/admin/types";
-import { parsePublicNumber } from "@/lib/utils";
 
 function toMessageHit(row: {
   id: string;
@@ -52,6 +55,33 @@ export function configPreviewFromEvent(
     priceUsdc: event.priceUsdc,
     totalMessages: event.totalMessages,
     totalReactions: event.totalReactions,
+    editionNumber: editionNumberOf(event),
+    archiveHash: event.archiveHash ?? null,
+    merkleRoot: event.merkleRoot ?? null,
+    archiveUri: event.archiveUri ?? null,
+    proofTx: event.proofTx ?? null,
+    windowMinutes: Math.max(
+      1,
+      Math.round((Date.parse(event.endsAt) - Date.parse(event.startsAt)) / 60_000),
+    ),
+    remainingMinutes: Math.max(0, Math.round((Date.parse(event.endsAt) - Date.now()) / 60_000)),
+  };
+}
+
+async function monumentContext() {
+  const editions = await listSealedEditions();
+  return {
+    simulation: isSimulation(),
+    editions: editions.map((edition) => ({
+      editionNumber: edition.editionNumber,
+      title: edition.title,
+      startsAt: edition.startsAt,
+      endsAt: edition.endsAt,
+      totalMessages: edition.totalMessages,
+      totalReactions: edition.totalReactions,
+      archiveHash: edition.archiveHash,
+      merkleRoot: edition.merkleRoot,
+    })),
   };
 }
 
@@ -69,6 +99,23 @@ export async function loadAdminHealth(eventStatus = "unknown") {
 
 export async function loadAdminOverview(): Promise<AdminOverview> {
   const event = await getEventSnapshot(eventSlug());
+  if (isSimulation() || !hasSupabaseConfig()) {
+    return {
+      config: configPreviewFromEvent(event),
+      totals: {
+        messages: event.totalMessages,
+        reactions: event.totalReactions,
+        usdc: 0,
+      },
+      recentFailures: [],
+      openReports: [],
+      flaggedMessages: [],
+      audit: [],
+      health: await loadAdminHealth(event.phase),
+      feedback: await listVisitorFeedback(),
+      ...(await monumentContext()),
+    };
+  }
   const db = createServiceSupabase();
 
   const [failures, reports, flagged, audit, payments] = await Promise.all([
@@ -163,11 +210,50 @@ export async function loadAdminOverview(): Promise<AdminOverview> {
     })),
     audit: auditLog,
     health: await loadAdminHealth(event.phase),
+    feedback: await listVisitorFeedback().catch(() => []),
+    ...(await monumentContext()),
   };
 }
 
 export async function searchAdminMessages(q: string): Promise<AdminMessageHit[]> {
   const event = await getEventSnapshot(eventSlug());
+  if (isSimulation() || !hasSupabaseConfig()) {
+    const n = parsePublicNumber(q);
+    if (n) {
+      try {
+        const message = getSimulatedMessage(n, event.id);
+        return [
+          {
+            id: message.id,
+            publicNumber: message.publicNumber,
+            text: message.text,
+            reactionCount: message.reactionCount,
+            publishedAt: message.publishedAt,
+            removedAt: message.isRemoved ? message.publishedAt : null,
+            moderationStatus: message.isRemoved ? "removed" : "approved",
+            removalReasonCode: message.isRemoved ? "other" : null,
+          },
+        ];
+      } catch {
+        return [];
+      }
+    }
+    const needle = q.trim().toLowerCase();
+    if (needle.length < 2) return [];
+    return listSimulatedMessages({ eventId: event.id, sort: "new", limit: 50 })
+      .messages.filter((message) => message.text.toLowerCase().includes(needle))
+      .slice(0, 25)
+      .map((message) => ({
+        id: message.id,
+        publicNumber: message.publicNumber,
+        text: message.text,
+        reactionCount: message.reactionCount,
+        publishedAt: message.publishedAt,
+        removedAt: message.isRemoved ? message.publishedAt : null,
+        moderationStatus: message.isRemoved ? "removed" : "approved",
+        removalReasonCode: message.isRemoved ? "other" : null,
+      }));
+  }
   const db = createServiceSupabase();
   const columns =
     "id, public_number, text, reaction_count, published_at, removed_at, moderation_status, removal_reason_code";

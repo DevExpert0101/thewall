@@ -31,8 +31,9 @@ export function redditShareUrl(url: string, title: string): string {
   return submit.toString();
 }
 
-const SHARE_PATH = /^\/(?:wall|archive|about)?$/;
+const SHARE_PATH = /^\/(?:wall|archive|about|records)?$/;
 const MESSAGE_PATH = /^\/message\/(\d{1,8})$/;
+const EDITION_PATH = /^\/archive\/\d{1,6}(?:\/(?:records|\d{1,8}))?$/;
 
 export function parseShareableUrl(raw: string, origin = siteUrl()): URL | null {
   let parsed: URL;
@@ -44,7 +45,7 @@ export function parseShareableUrl(raw: string, origin = siteUrl()): URL | null {
   const allowed = new URL(origin);
   if (parsed.origin !== allowed.origin) return null;
   const path = parsed.pathname.replace(/\/$/, "") || "/";
-  if (path === "/" || SHARE_PATH.test(path) || MESSAGE_PATH.test(path)) {
+  if (path === "/" || SHARE_PATH.test(path) || MESSAGE_PATH.test(path) || EDITION_PATH.test(path)) {
     parsed.hash = "";
     parsed.search = "";
     parsed.pathname = path;

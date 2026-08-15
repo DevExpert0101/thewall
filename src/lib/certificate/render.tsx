@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { ARCHIVAL_REMOVAL_TEXT } from "@/lib/constants";
 import { colors } from "@/lib/design/tokens";
-import { formatCount, formatPublicNumber, formatUtcTime } from "@/lib/utils";
+import { formatCount, formatEditionNumber, formatPublicNumber, formatUtcTime } from "@/lib/utils";
 import type { CertificatePayload } from "@/lib/types";
 import { CREATIVE_SIZES, type CreativeRatio } from "@/lib/share/compose";
 
@@ -47,7 +47,9 @@ export function renderCertificateImage(
             CERTIFICATE
           </div>
           <div style={{ display: "flex", fontSize: 16, letterSpacing: 6, color: colors.ash }}>
-            {data.eventTitle}
+            {data.editionNumber
+              ? `${data.eventTitle} ${formatEditionNumber(data.editionNumber)}`
+              : data.eventTitle}
           </div>
           <div style={{ display: "flex", fontSize: 16, color: colors.mist }}>{data.eventDate}</div>
         </div>

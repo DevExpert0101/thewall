@@ -1,7 +1,7 @@
 import { APP_NAME, TAGLINE } from "@/lib/constants";
 import { remainClause, untilOpenClause } from "@/lib/event/remaining";
 import type { EventSnapshot, PublicMessage } from "@/lib/types";
-import { formatCount, formatPublicNumber, siteUrl } from "@/lib/utils";
+import { editionMessagePath, editionNumberOf, formatCount, formatPublicNumber, siteUrl } from "@/lib/utils";
 
 export type SharePayload = {
   title: string;
@@ -21,13 +21,18 @@ function joinUrl(path: string): string {
 }
 
 export function sharePayloadForMessage(input: {
-  event: Pick<EventSnapshot, "phase" | "endsAt" | "serverNow">;
+  event: Pick<EventSnapshot, "phase" | "endsAt" | "serverNow" | "editionNumber">;
   message: Pick<PublicMessage, "publicNumber" | "isRemoved" | "finalRank">;
   now?: string;
+  path?: string;
 }): SharePayload {
   const now = input.now ?? input.event.serverNow;
   const number = formatPublicNumber(input.message.publicNumber);
-  const path = messagePath(input.message.publicNumber);
+  const path =
+    input.path ??
+    (input.event.phase === "archived" || input.event.phase === "finalizing"
+      ? editionMessagePath(editionNumberOf(input.event), input.message.publicNumber)
+      : messagePath(input.message.publicNumber));
   const url = joinUrl(path);
   const title = `${number} — ${APP_NAME}`;
 

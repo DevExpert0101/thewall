@@ -3,11 +3,13 @@ import { AppError, ERROR_CODES } from "@/lib/errors";
 import { isSimulation } from "@/lib/env";
 import {
   getSimulatedMessage,
+  isSimulationEvent,
   listSimulatedMessages,
   simulatedMessageList,
 } from "@/lib/data/simulation";
 import { createServiceSupabase } from "@/lib/supabase/admin";
 import type { PublicMessage } from "@/lib/types";
+import { parsePublicNumber } from "@/lib/utils";
 import { WALL_TRENDING_WINDOW } from "@/lib/wall/constants";
 import { offsetFromCursor, pageWindow } from "@/lib/wall/feed";
 import { trendingScore } from "@/lib/ranking";
@@ -44,8 +46,8 @@ export async function getMessageByNumber(
   eventId: string,
   publicNumber: number,
 ): Promise<PublicMessage> {
-  if (isSimulation() || eventId === "local") {
-    return getSimulatedMessage(publicNumber);
+  if (isSimulation() || isSimulationEvent(eventId)) {
+    return getSimulatedMessage(publicNumber, eventId);
   }
   const db = createServiceSupabase();
   const { data, error } = await db
@@ -71,7 +73,7 @@ export async function listMessages(input: {
   cursor?: string;
   salt?: string;
 }): Promise<{ messages: PublicMessage[]; nextCursor: string | null }> {
-  if (isSimulation() || input.eventId === "local") {
+  if (isSimulation() || isSimulationEvent(input.eventId)) {
     return listSimulatedMessages(input);
   }
   const db = createServiceSupabase();
@@ -234,7 +236,7 @@ export async function getReactionCounts(
   ids: string[],
 ): Promise<Record<string, number>> {
   if (ids.length === 0) return {};
-  if (isSimulation() || eventId === "local") {
+  if (isSimulation() || isSimulationEvent(eventId)) {
     const counts: Record<string, number> = {};
     for (const message of simulatedMessageList()) {
       if (ids.includes(message.id)) counts[message.id] = message.reactionCount;
@@ -269,4 +271,46 @@ export async function searchByPublicNumber(
     }
     throw error;
   }
+}
+
+export function normalizeSearchNeedle(q: string): string {
+  return q.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 140);
+}
+
+export async function searchPublicMessages(
+  eventId: string,
+  q: string,
+): Promise<PublicMessage[]> {
+  const n = parsePublicNumber(q);
+  if (n) {
+    const found = await searchByPublicNumber(eventId, n);
+    return found ? [found] : [];
+  }
+
+  const needle = normalizeSearchNeedle(q);
+  if (needle.length < 2) return [];
+
+  if (isSimulation() || isSimulationEvent(eventId)) {
+    const { messages } = await listSimulatedMessages({
+      eventId,
+      sort: "new",
+      limit: 10_000,
+    });
+    return messages.filter((message) => message.text.toLowerCase().includes(needle)).slice(0, 50);
+  }
+
+  const db = createServiceSupabase();
+  const escaped = needle.replace(/[%_\\]/g, "");
+  if (escaped.length < 2) return [];
+  const { data, error } = await db
+    .from("public_messages")
+    .select(PUBLIC_COLUMNS)
+    .eq("event_id", eventId)
+    .ilike("text", `%${escaped}%`)
+    .order("published_at", { ascending: false })
+    .limit(50);
+  if (error) {
+    throw new AppError(ERROR_CODES.UNAVAILABLE, "Messages could not be loaded.", 503);
+  }
+  return ((data as MessageRow[]) ?? []).map(toPublic);
 }

@@ -58,6 +58,32 @@ export type AdminConfigPreview = {
   priceUsdc: string;
   totalMessages: number;
   totalReactions: number;
+  editionNumber: number;
+  archiveHash: string | null;
+  merkleRoot: string | null;
+  archiveUri: string | null;
+  proofTx: string | null;
+  windowMinutes: number;
+  remainingMinutes: number;
+};
+
+export type AdminEditionCard = {
+  editionNumber: number;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  totalMessages: number;
+  totalReactions: number;
+  archiveHash: string | null;
+  merkleRoot: string | null;
+};
+
+export type AdminFeedbackRow = {
+  id: string;
+  body: string;
+  category: string;
+  email: string | null;
+  createdAt: string;
 };
 
 export type AdminOverview = {
@@ -68,4 +94,7 @@ export type AdminOverview = {
   flaggedMessages: { id: string; publicNumber: number; moderationStatus: string }[];
   audit: AdminAuditRow[];
   health: AdminHealth;
+  simulation: boolean;
+  editions: AdminEditionCard[];
+  feedback: AdminFeedbackRow[];
 };

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Cinzel, Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
-import { EmberField } from "@/components/ember-field";
 import { SiteShell } from "@/components/site-shell";
 import { APP_NAME, SUPPORTING_COPY, TAGLINE } from "@/lib/constants";
 import { isSimulation } from "@/lib/env";
@@ -65,7 +65,8 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html
       lang="en"
@@ -75,14 +76,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} ${instrument.variable} ${cinzel.variable} h-full antialiased`}
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
       <body className="grain min-h-full bg-stone font-sans text-paper">
         <div className="atmosphere" aria-hidden="true">
           <div className="atmosphere-glow" />
-          <div className="atmosphere-rays" />
-          <div className="atmosphere-masonry" />
-          <EmberField />
         </div>
         <div className="relative z-10 min-h-full">
           <SiteShell simulation={isSimulation()}>{children}</SiteShell>

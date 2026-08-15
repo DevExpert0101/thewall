@@ -5,8 +5,10 @@ import { useState } from "react";
 import { Countdown } from "@/components/countdown";
 import { PrimaryCta } from "@/components/primary-cta";
 import { PublishDialog } from "@/components/publish-dialog";
+import { MonumentTitle } from "@/components/monument-title";
 import { TAGLINE } from "@/lib/constants";
 import type { EventSnapshot } from "@/lib/types";
+import { wallTitle } from "@/lib/utils";
 
 const TAGLINE_LINES = TAGLINE.split(/(?<=\.)\s+/);
 
@@ -64,33 +66,20 @@ export function LandingHero({
         {phase === "live" ? (
           <p className="hero-live">
             <span className="live-dot" aria-hidden="true" />
-            The monument is open
+            Open now
           </p>
         ) : (
           <p className="kicker">A 24-hour monument</p>
         )}
 
-        <h1 className="monument-title">
-          <span className="monument-the">THE</span>
-          <span className="monument-wall">WALL</span>
-        </h1>
-        <span className="title-rule monument-rule mx-auto mt-6 block animate-ember-draw" aria-hidden="true" />
+        <MonumentTitle title={event.title} />
+        <span className="title-rule monument-rule mx-auto mt-5 block animate-ember-draw" aria-hidden="true" />
         <p className="monument-tagline">
           {TAGLINE_LINES.map((line) => (
             <span key={line} className="tagline-line">
               {line}
             </span>
           ))}
-        </p>
-        <p className="lede hero-lede">
-          For 24 hours, the world gets one anonymous wall. Anyone can read it. One
-          dollar buys one 140-character message. When the clock reaches zero, no one
-          can add another word.
-        </p>
-        <p className="hero-vow">
-          No account. No followers. No profile. No identity.
-          <br />
-          Just your words.
         </p>
 
         <div className={phase === "live" ? "hero-clock hero-clock-live" : "hero-clock"}>
@@ -110,10 +99,11 @@ export function LandingHero({
           <PrimaryCta phase={phase} onPublish={() => setOpen(true)} className="hero-cta" />
           {phase === "live" ? (
             <Link href="/wall" className="btn btn-line hero-secondary">
-              See The Wall
+              See {wallTitle(event)}
             </Link>
           ) : null}
         </div>
+        <p className="hero-trust">One dollar. One sentence. No account.</p>
       </div>
 
       <PublishDialog

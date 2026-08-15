@@ -4,7 +4,7 @@ import { ensureAnonymousUser, peekAnonymousUser } from "@/lib/auth";
 
 export async function GET() {
   try {
-    if (!hasSupabaseConfig()) {
+    if (isSimulation() || !hasSupabaseConfig()) {
       return jsonOk({
         configured: false,
         present: false,
@@ -28,7 +28,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    if (!hasSupabaseConfig()) {
+    if (isSimulation() || !hasSupabaseConfig()) {
       return jsonOk({
         configured: false,
         present: false,

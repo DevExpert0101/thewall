@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import Link from "next/link";
-import { formatPublicNumber } from "@/lib/utils";
+import { editionMessagePath, editionNumberOf, formatPublicNumber } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { FireButton } from "@/components/fire-button";
 import { SharePanel } from "@/components/share-panel";
@@ -26,10 +26,13 @@ export const MessageCard = memo(function MessageCard({
   dense?: boolean;
   fresh?: boolean;
   featured?: boolean;
-  event?: Pick<EventSnapshot, "phase" | "endsAt" | "serverNow">;
+  event?: Pick<EventSnapshot, "phase" | "endsAt" | "serverNow" | "editionNumber">;
   onReacted?: (id: string, count: number) => void;
 }) {
-  const href = `/message/${message.publicNumber}`;
+  const href =
+    event && (event.phase === "archived" || event.phase === "finalizing")
+      ? editionMessagePath(editionNumberOf(event), message.publicNumber)
+      : `/message/${message.publicNumber}`;
   const payload = sharePayloadForMessage({
     event: event ?? { phase, endsAt: new Date(0).toISOString(), serverNow: new Date().toISOString() },
     message,
@@ -54,8 +57,8 @@ export const MessageCard = memo(function MessageCard({
       </div>
       <p
         className={cn(
-          "font-display leading-[1.15] text-paper",
-          featured ? "text-[1.65rem] sm:text-4xl" : dense ? "text-[1.2rem] sm:text-xl" : "text-xl sm:text-2xl",
+          "message-text font-display text-paper",
+          featured ? "message-text-featured" : dense ? "message-text-dense" : "message-text-card",
           message.isRemoved && "text-ash italic",
         )}
       >

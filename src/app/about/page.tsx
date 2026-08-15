@@ -17,11 +17,18 @@ export default function AboutPage() {
       <span className="title-rule mt-6 block" aria-hidden="true" />
       <div className="mt-10 space-y-12 text-[1.05rem] leading-relaxed text-mist">
         <p>
-          The Wall is a 24-hour internet event. There is only one Wall — not a
-          series, not a history of earlier days. For one day, anyone may read an
-          anonymous wall of 140-character sentences. Publishing costs 1.00 USDC on
-          Base. When the clock reaches zero, writing stops. The archive is that
-          same day, frozen. It does not reopen.
+          The Wall is a 24-hour internet event. Anyone may read an anonymous wall
+          of 140-character sentences. Publishing costs 1.00 USDC on Base. When the
+          clock reaches zero, writing stops. That day is sealed as a numbered
+          edition — THE WALL №001, then №002, and so on. The Archive is the library
+          of those completed days. A sealed Wall does not reopen.
+        </p>
+        <p>
+          Supabase is the working copy the site reads. The permanent artifact is
+          the final moderated dataset: a canonical JSON file, its SHA-256 hash, and
+          a Merkle root. Off-site replicas (Arweave, a Base proof, public downloads)
+          can hold that sealed record. Raw unmoderated submissions are never pushed
+          to irreversible storage.
         </p>
         <p>
           There are no usernames, avatars, or follower counts. No email. No
@@ -45,6 +52,14 @@ export default function AboutPage() {
             Published violations can still be removed from a message’s page report
             or the operator panel. The number stays. The public line becomes:
             “Message removed under archive policy.”
+          </p>
+        </section>
+        <section className="border-t border-line pt-10">
+          <h2 className="font-display text-3xl leading-tight text-paper">Feedback</h2>
+          <p className="mt-4">
+            If the clock, the payment, or the stone is wrong, write to the stewards
+            from the bottom of the front page. That note is not a sentence on the Wall.
+            An email is optional and never published.
           </p>
         </section>
         <section className="border-t border-line pt-10">

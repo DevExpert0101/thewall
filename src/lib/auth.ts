@@ -7,6 +7,7 @@ import { clientIpHashForLimit } from "@/lib/abuse/ip";
 import { ABUSE_LIMITS, rateLimitKey } from "@/lib/abuse/keys";
 import { shouldCreateAnonymousUser } from "@/lib/abuse/session-policy";
 import { resolveAdminAccess } from "@/lib/admin/access";
+import { peekLocalAdmin } from "@/lib/admin/local";
 
 export type AnonymousSession = {
   id: string;
@@ -69,6 +70,9 @@ export async function ensureAnonymousUser(request?: Request): Promise<AnonymousS
 }
 
 export async function requireAdmin(): Promise<{ id: string; email: string }> {
+  const local = await peekLocalAdmin();
+  if (local) return local;
+
   if (!hasSupabaseConfig()) {
     throw new AppError(ERROR_CODES.CONFIG, "Administrator sign-in is not configured.", 503);
   }

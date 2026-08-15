@@ -85,8 +85,8 @@ export function Countdown({
   ];
 
   return (
-    <div className="text-center">
-      <p className="kicker mb-5">{label}</p>
+    <div className="countdown-hero">
+      <p className="kicker">{label}</p>
       <div
         className="countdown-cells"
         role="timer"
@@ -94,22 +94,25 @@ export function Countdown({
         aria-atomic="true"
         aria-label={`${label}: ${digits}`}
       >
-        {cells.map((cell) => (
-          <div key={cell.unit} className="countdown-cell">
-            <span
-              className={cn(
-                "countdown-digit",
-                urgent && "text-blood",
-                frozen && "text-ash",
-              )}
-            >
-              {cell.value.split("").map((ch, i) => (
-                <span key={`${cell.unit}-${ch}-${i}`} className="inline-block animate-tick">
-                  {ch}
-                </span>
-              ))}
-            </span>
-            <span className="countdown-unit">{cell.unit}</span>
+        {cells.map((cell, index) => (
+          <div key={cell.unit} className="countdown-slot">
+            {index > 0 ? (
+              <span className="countdown-colon" aria-hidden="true">
+                :
+              </span>
+            ) : null}
+            <div className="countdown-cell">
+              <span
+                className={cn(
+                  "countdown-digit",
+                  urgent && "text-blood",
+                  frozen && "text-ash",
+                )}
+              >
+                {cell.value}
+              </span>
+              <span className="countdown-unit">{cell.unit}</span>
+            </div>
           </div>
         ))}
       </div>

@@ -22,13 +22,8 @@ export function PrimaryCta({
   }
   if (phase === "live") {
     return (
-      <button
-        type="button"
-        onClick={onPublish}
-        className={cn("btn btn-primary flex-col gap-0.5 py-2", className)}
-      >
-        <span>Leave your mark</span>
-        <span className="text-[10px] tracking-[0.2em] text-void/70">1.00 USDC · Base</span>
+      <button type="button" onClick={onPublish} className={cn("btn btn-primary", className)}>
+        Leave your mark
       </button>
     );
   }

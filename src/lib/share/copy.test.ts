@@ -81,6 +81,8 @@ describe("share links", () => {
 
   it("only oEmbeds public Wall URLs", () => {
     expect(parseShareableUrl("http://localhost:3000/message/4291")?.pathname).toBe("/message/4291");
+    expect(parseShareableUrl("http://localhost:3000/archive/001/4291")?.pathname).toBe("/archive/001/4291");
+    expect(parseShareableUrl("http://localhost:3000/records")?.pathname).toBe("/records");
     expect(parseShareableUrl("http://localhost:3000/wall")?.pathname).toBe("/wall");
     expect(parseShareableUrl("http://evil.example/message/4291")).toBeNull();
     expect(parseShareableUrl("http://localhost:3000/admin")).toBeNull();

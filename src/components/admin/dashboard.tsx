@@ -4,20 +4,46 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AdminConfirmDialog } from "@/components/admin/confirm-dialog";
+import { AdminWallControls } from "@/components/admin/wall-controls";
 import type { DangerousAdminAction } from "@/lib/admin/confirm";
 import type {
   AdminAuditRow,
+  AdminFeedbackRow,
   AdminMessageHit,
   AdminOverview,
   AdminPaymentHit,
   AdminReportRow,
 } from "@/lib/admin/types";
 import type { ModerationReasonCode } from "@/lib/constants";
-import { formatPublicNumber } from "@/lib/utils";
+import {
+  editionPath,
+  formatCount,
+  formatEditionDate,
+  formatEditionNumber,
+  formatPublicNumber,
+  formatUtcTime,
+} from "@/lib/utils";
 
 type Pending =
   | { kind: "remove" | "restore"; messageId: string; publicNumber: number }
   | { kind: "dismiss"; reportId: string; publicNumber: number | null };
+
+const PHASE_LABEL: Record<string, string> = {
+  upcoming: "Not yet open",
+  live: "The day is open",
+  finalizing: "Sealing",
+  archived: "Sealed",
+};
+
+const HEALTH_LABEL: Record<string, string> = {
+  database: "Working copy",
+  privilegedDb: "Service role",
+  payments: "Treasury",
+  turnstile: "Visitor gate",
+  network: "Network",
+  eventStatus: "Current phase",
+  moderation: "Moderation",
+};
 
 export function AdminDashboard({
   initial,
@@ -133,16 +159,35 @@ export function AdminDashboard({
   }
 
   const dialogAction: DangerousAdminAction | null = pending?.kind ?? null;
+  const edition = overview.config.editionNumber;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-12 px-4 py-10 sm:px-6">
+    <div className="mx-auto max-w-5xl space-y-16 px-4 py-12 sm:px-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="kicker">Operations</p>
-          <h1 className="mt-2 font-display text-4xl">{overview.config.title}</h1>
-          <p className="mt-2 text-sm text-ash">Signed in as {email}</p>
+          <p className="kicker">
+            Stewardship
+            {overview.simulation ? " · Simulation" : ""}
+          </p>
+          <h1 className="permanence-title mt-4">Keep the monument legible.</h1>
+          <span className="title-rule mt-5 block" aria-hidden="true" />
+          <p className="lede mt-5 max-w-xl">
+            Each Wall lives for 24 hours, then becomes a numbered edition. Moderate
+            the live day before it is sealed. After seal, a removal is a redaction —
+            the number stays.
+          </p>
+          <p className="mt-4 text-sm text-ash">Signed in as {email}</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
+          <Link href="/wall" className="btn-ghost kicker">
+            The Wall
+          </Link>
+          <Link href="/archive" className="btn-ghost kicker">
+            Archive
+          </Link>
+          <Link href="/records" className="btn-ghost kicker">
+            Records
+          </Link>
           <Link href="/" className="btn-ghost kicker">
             Public site
           </Link>
@@ -159,37 +204,89 @@ export function AdminDashboard({
       ) : null}
 
       <section>
-        <h2 className="kicker">Event overview</h2>
-        <p className="mt-3 text-sm text-mist">
-          Calculated state: <strong className="text-paper">{overview.config.phase}</strong>
+        <h2 className="kicker">Current edition</h2>
+        <p className="mt-3 font-mono text-sm tracking-[0.22em] text-bronze">
+          {formatEditionNumber(edition)}
         </p>
-        <div className="mt-4 grid grid-cols-3 gap-4">
-          <Stat k="Messages" v={String(overview.totals.messages)} />
-          <Stat k="Reactions" v={String(overview.totals.reactions)} />
-          <Stat k="USDC" v={overview.totals.usdc.toFixed(2)} />
+        <p className="mt-2 font-display text-3xl text-paper">{overview.config.title}</p>
+        <p className="mt-2 text-sm text-mist">
+          {PHASE_LABEL[overview.config.phase] ?? overview.config.phase}
+        </p>
+        <p className="mt-2 text-sm text-mist">
+          {formatEditionDate(overview.config.startsAt)} · {formatUtcTime(overview.config.startsAt)}{" "}
+          → {formatUtcTime(overview.config.endsAt)}
+        </p>
+        <div className="mt-6 grid grid-cols-3 gap-4">
+          <Stat k="Voices" v={formatCount(overview.totals.messages)} />
+          <Stat k="Fire" v={formatCount(overview.totals.reactions)} />
+          <Stat k="USDC settled" v={overview.totals.usdc.toFixed(2)} />
         </div>
+        {overview.simulation ? (
+          <p className="mt-3 text-xs text-ash">
+            Simulation does not settle payments. One dollar still means one sentence.
+          </p>
+        ) : null}
       </section>
 
+      <AdminWallControls
+        key={`${overview.config.editionNumber}-${overview.config.phase}-${overview.config.startsAt}`}
+        config={overview.config}
+        simulation={overview.simulation}
+        onError={setError}
+        onSaved={refresh}
+      />
+
       <section>
-        <h2 className="kicker">Event configuration</h2>
-        <p className="mt-2 text-sm text-ash">Preview only. Timestamps are not edited from this console.</p>
-        <dl className="mt-4 grid gap-2 font-mono text-sm sm:grid-cols-2">
-          <Row k="Slug" v={overview.config.slug} />
-          <Row k="Network" v={overview.config.network} />
-          <Row k="Starts" v={overview.config.startsAt} />
-          <Row k="Ends" v={overview.config.endsAt} />
-          <Row k="Treasury" v={overview.config.treasuryAddress ?? "unset"} />
-          <Row k="Price" v={`${overview.config.priceUsdc} USDC`} />
-        </dl>
+        <h2 className="kicker">Archive library</h2>
+        <p className="mt-2 text-sm text-mist">
+          Sealed days only. Nothing is invented. The public record is the final
+          moderated dataset.
+        </p>
+        {overview.editions.length === 0 ? (
+          <p className="mt-4 text-sm text-ash">The library is empty until this Wall is sealed.</p>
+        ) : (
+          <ul className="mt-6 grid gap-3 md:grid-cols-2">
+            {overview.editions.map((row) => (
+              <li key={row.editionNumber} className="inscribe p-5">
+                <p className="kicker text-bronze">{formatEditionNumber(row.editionNumber)}</p>
+                <p className="mt-2 font-display text-2xl text-paper">{row.title ?? formatEditionDate(row.startsAt)}</p>
+                <p className="mt-2 font-mono text-xs tracking-[0.14em] text-mist">
+                  {formatEditionDate(row.startsAt)}
+                </p>
+                <p className="mt-3 font-mono text-xs tracking-[0.14em] text-mist">
+                  {formatCount(row.totalMessages)} voices · {formatCount(row.totalReactions)} 🔥
+                </p>
+                <p className="mt-3 break-all font-mono text-[0.65rem] text-ash">
+                  {row.archiveHash ?? "Hash pending"}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Link href={editionPath(row.editionNumber)} className="btn-ghost inline-flex kicker hover:text-paper">
+                    Open edition →
+                  </Link>
+                  <Link
+                    href={`${editionPath(row.editionNumber)}/records`}
+                    className="btn-ghost inline-flex kicker hover:text-paper"
+                  >
+                    Records →
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section>
         <h2 className="kicker">Message search</h2>
+        <p className="mt-2 text-sm text-mist">
+          Search this edition by number or words. Removal keeps the number; the public
+          line becomes archive policy text.
+        </p>
         <form onSubmit={(e) => void search(e)} className="mt-3 flex gap-2">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Number, text, tx hash, or id"
+            placeholder="#000004 or fifty years"
             className="field flex-1"
           />
           <button className="btn btn-line" type="submit">
@@ -241,6 +338,7 @@ export function AdminDashboard({
         <h2 className="kicker">Reports queue</h2>
         <p className="mt-2 text-sm text-mist">
           Open reports: {overview.openReports.length}. Flagged messages: {overview.flaggedMessages.length}.
+          {overview.simulation ? " Simulation has no visitor reports until a real project is connected." : ""}
         </p>
         <ul className="mt-4 space-y-3">
           {overview.openReports.length === 0 ? (
@@ -288,7 +386,29 @@ export function AdminDashboard({
       </section>
 
       <section>
+        <h2 className="kicker">Visitor notes</h2>
+        <p className="mt-2 text-sm text-mist">
+          Letters to the stewards. Not published. Optional emails are for reply only.
+        </p>
+        <ul className="mt-4 space-y-3">
+          {overview.feedback.length === 0 ? (
+            <li className="text-sm text-ash">No notes yet.</li>
+          ) : null}
+          {overview.feedback.map((row: AdminFeedbackRow) => (
+            <li key={row.id} className="inscribe p-4 text-sm">
+              <p className="font-mono text-xs tracking-[0.14em] text-ash">
+                {row.createdAt} · {row.category}
+                {row.email ? ` · ${row.email}` : ""}
+              </p>
+              <p className="mt-2 text-paper">{row.body}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
         <h2 className="kicker">Moderation audit log</h2>
+        <p className="mt-2 text-sm text-mist">Every removal and restore is kept. The public never sees this log.</p>
         <ul className="mt-4 space-y-2 text-sm text-mist">
           {overview.audit.length === 0 ? <li>No moderation actions yet.</li> : null}
           {overview.audit.map((row: AdminAuditRow) => (
@@ -303,6 +423,10 @@ export function AdminDashboard({
 
       <section>
         <h2 className="kicker">Payment lookup</h2>
+        <p className="mt-2 text-sm text-mist">
+          One dollar publishes one sentence. Look up a settlement by transaction hash.
+          Wallets stay truncated.
+        </p>
         <form onSubmit={(e) => void lookupPayment(e)} className="mt-3 flex gap-2">
           <input
             value={paymentQuery}
@@ -341,9 +465,13 @@ export function AdminDashboard({
 
       <section>
         <h2 className="kicker">System health</h2>
+        <p className="mt-2 text-sm text-mist">
+          Supabase is the working copy. Hashes prove the sealed dataset. Off-site
+          permanence is published after final moderation.
+        </p>
         <dl className="mt-4 grid gap-2 font-mono text-sm sm:grid-cols-2">
           {Object.entries(overview.health).map(([k, v]) => (
-            <Row key={k} k={k} v={String(v)} />
+            <Row key={k} k={HEALTH_LABEL[k] ?? k} v={String(v)} />
           ))}
         </dl>
         <p className="mt-3 text-xs text-ash">Secret values are never displayed — only configured or missing.</p>
@@ -376,9 +504,9 @@ export function AdminDashboard({
 
 function Stat({ k, v }: { k: string; v: string }) {
   return (
-    <div className="border border-line p-4">
-      <p className="text-2xl text-paper">{v}</p>
-      <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-ash">{k}</p>
+    <div className="stat-tablet">
+      <p className="stat-value text-paper">{v}</p>
+      <p className="kicker mt-3">{k}</p>
     </div>
   );
 }

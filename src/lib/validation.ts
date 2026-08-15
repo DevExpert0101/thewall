@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { MESSAGE_MAX_GRAPHEMES, MODERATION_REASON_CODES, REPORT_CATEGORIES, SORTS } from "@/lib/constants";
+import {
+  FEEDBACK_CATEGORIES,
+  MESSAGE_MAX_GRAPHEMES,
+  MODERATION_REASON_CODES,
+  REPORT_CATEGORIES,
+  SORTS,
+} from "@/lib/constants";
 import { isOwnershipSecret } from "@/lib/ownership/wall-key";
 
 export const composeSchema = z.object({
@@ -29,12 +35,25 @@ export const reportSchema = z.object({
   detail: z.string().max(500).optional(),
 });
 
+export const feedbackSchema = z.object({
+  body: z.string().trim().min(8).max(800),
+  category: z.enum(FEEDBACK_CATEGORIES).default("product"),
+  email: z
+    .string()
+    .trim()
+    .email()
+    .max(200)
+    .optional()
+    .or(z.literal("")),
+});
+
 export const messagesQuerySchema = z.object({
   sort: z.enum(SORTS).default("trending"),
   cursor: z.string().max(80).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(24),
-  q: z.string().max(32).optional(),
+  q: z.string().max(140).optional(),
   salt: z.string().max(64).optional(),
+  edition: z.coerce.number().int().min(1).max(999999).optional(),
 });
 
 export const pulseQuerySchema = z.object({
@@ -99,9 +118,12 @@ export const adminReportReviewSchema = z.object({
 });
 
 export const adminEventSchema = z.object({
+  action: z.enum(["save", "start", "finish", "openNext", "reset"]).optional().default("save"),
   title: z.string().min(1).max(80).optional(),
   startsAt: z.string().datetime({ offset: true }).optional(),
   endsAt: z.string().datetime({ offset: true }).optional(),
+  remainingMinutes: z.number().int().min(1).max(14 * 24 * 60).optional(),
+  durationMinutes: z.number().int().min(1).max(14 * 24 * 60).optional(),
   confirmHistoricalEdit: z.boolean().optional(),
 });
 

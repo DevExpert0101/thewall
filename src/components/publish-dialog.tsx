@@ -111,6 +111,7 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
     simulatedPaymentId?: string;
   } | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
+  const [simulated, setSimulated] = useState(false);
   const [checkout, setCheckout] = useState<{
     intentId: string;
     paymentId: string;
@@ -151,6 +152,8 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
       if (cancelled) return;
       if (!session.configured) {
         if (session.simulation) {
+          setSimulated(true);
+          setToken("simulation-local");
           setSessionReady(true);
           return;
         }
@@ -261,11 +264,16 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
       return;
     }
     setPreviewText(data.text ?? previewText);
+    if (simulated) {
+      void issueTicket("simulation-local");
+      return;
+    }
     setStep("challenge");
   }
 
-  async function issueTicket() {
-    if (!enabled || !token || !composerCanContinue(previewText || text)) return;
+  async function issueTicket(overrideToken?: string) {
+    const challenge = overrideToken ?? token;
+    if (!enabled || !challenge || !composerCanContinue(previewText || text)) return;
     if (prepared && wallKey) {
       setStep("ticket");
       return;
@@ -276,7 +284,7 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
       const intentRes = await fetch("/api/publish/intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: previewText || text, turnstileToken: token }),
+        body: JSON.stringify({ message: previewText || text, turnstileToken: challenge }),
       });
       const intent = await intentRes.json();
       if (!intentRes.ok) {
@@ -449,7 +457,6 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
               endsAt={endsAt}
               serverNow={serverNow}
               ownershipToken={result.ownershipToken}
-              simulation={Boolean(prepared?.simulated)}
             />
           ) : null}
 

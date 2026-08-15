@@ -20,7 +20,15 @@ type EventRow = {
   ends_at: string;
   archived_at: string | null;
   finalized_at: string | null;
+  edition_number?: number | null;
+  archive_hash?: string | null;
+  merkle_root?: string | null;
+  archive_uri?: string | null;
+  proof_tx?: string | null;
 };
+
+const EVENT_COLUMNS =
+  "id, slug, title, starts_at, ends_at, archived_at, finalized_at, edition_number, archive_hash, merkle_root, archive_uri, proof_tx";
 
 const finalizeInflight = new Map<string, Promise<EventRow>>();
 
@@ -35,7 +43,7 @@ export async function getEventBySlug(
   const db = createServiceSupabase();
   const { data: event, error } = await db
     .from("events")
-    .select("id, slug, title, starts_at, ends_at, archived_at, finalized_at")
+    .select(EVENT_COLUMNS)
     .eq("slug", slug)
     .maybeSingle();
 
@@ -61,7 +69,7 @@ export async function getEventBySlug(
         await db.rpc("finalize_event_rankings", { p_event_id: event.id });
         const { data: refreshed } = await db
           .from("events")
-          .select("id, slug, title, starts_at, ends_at, archived_at, finalized_at")
+          .select(EVENT_COLUMNS)
           .eq("id", event.id)
           .single();
         return (refreshed as EventRow | null) ?? event;
@@ -87,12 +95,27 @@ export async function getEventBySlug(
   };
 }
 
+async function resolveOpenEventSlug(preferredSlug: string): Promise<string> {
+  const db = createServiceSupabase();
+  const now = new Date().toISOString();
+  const { data: open } = await db
+    .from("events")
+    .select("slug")
+    .is("finalized_at", null)
+    .gt("ends_at", now)
+    .order("starts_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return open?.slug ?? preferredSlug;
+}
+
 async function snapshotFromSlug(slug: string, finalize: boolean): Promise<EventSnapshot> {
   if (isSimulation() || !hasSupabaseConfig()) {
     return currentSimulatedEvent();
   }
 
-  const { event, totalMessages, totalReactions } = await getEventBySlug(slug, { finalize });
+  const currentSlug = await resolveOpenEventSlug(slug);
+  const { event, totalMessages, totalReactions } = await getEventBySlug(currentSlug, { finalize });
   const phase = deriveEventPhase({
     startsAt: event.starts_at,
     endsAt: event.ends_at,
@@ -122,7 +145,40 @@ async function snapshotFromSlug(slug: string, finalize: boolean): Promise<EventS
     treasuryAddress: treasury,
     network: getNetwork(),
     priceUsdc: PRICE_USDC,
+    editionNumber: event.edition_number ?? 1,
+    archiveHash: event.archive_hash ?? null,
+    merkleRoot: event.merkle_root ?? null,
+    archiveUri: event.archive_uri ?? null,
+    proofTx: event.proof_tx ?? null,
   };
+}
+
+export async function getEventByEdition(
+  editionNumber: number,
+  options: { finalize?: boolean } = {},
+): Promise<{
+  event: EventRow;
+  totalMessages: number;
+  totalReactions: number;
+}> {
+  const db = createServiceSupabase();
+  const { data: event, error } = await db
+    .from("events")
+    .select(EVENT_COLUMNS)
+    .eq("edition_number", editionNumber)
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError(ERROR_CODES.UNAVAILABLE, "Event could not be loaded.", 503);
+  }
+  if (!event) {
+    throw new AppError(ERROR_CODES.MESSAGE_NOT_FOUND, "Edition not found.", 404);
+  }
+  return getEventBySlug(event.slug, options);
+}
+
+export function loadEventSnapshot(slug: string, finalize = true) {
+  return snapshotFromSlug(slug, finalize);
 }
 
 /** Per-request dedupe for metadata + page + nested loads. */

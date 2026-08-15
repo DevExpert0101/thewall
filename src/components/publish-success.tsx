@@ -13,7 +13,6 @@ type Props = {
   endsAt: string;
   serverNow: string;
   ownershipToken: string;
-  simulation?: boolean;
 };
 
 export function PublishSuccess({
@@ -22,7 +21,6 @@ export function PublishSuccess({
   endsAt,
   serverNow,
   ownershipToken,
-  simulation = false,
 }: Props) {
   const href = `/message/${publicNumber}`;
   const [now, setNow] = useState(() => new Date(serverNow).getTime());
@@ -73,24 +71,6 @@ export function PublishSuccess({
       ) : null}
       <div className="mt-10 flex flex-col gap-3">
         <SharePanel payload={payload} via="publish" primaryLabel="Share your message" />
-        {simulation && ownershipToken ? (
-          <button
-            type="button"
-            className="btn btn-ember w-full"
-            onClick={() => {
-              void fetch("/api/simulate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "close" }),
-              }).then((res) => {
-                if (!res.ok) return;
-                window.location.href = "/archive";
-              });
-            }}
-          >
-            Finish this Wall and open the archive
-          </button>
-        ) : null}
         <a
           href={href}
           className="btn btn-line w-full"

@@ -129,7 +129,7 @@ export function isSimulation(): boolean {
 }
 
 /**
- * Freeze the same simulated Wall (not a previous event) so /archive can be reviewed.
+ * Freeze the current simulated Wall as edition №001 so /archive can be reviewed.
  * Ignored unless simulation is already on.
  */
 export function isArchiveSimulation(): boolean {

@@ -9,6 +9,50 @@ export function formatPublicNumber(n: number): string {
   return `#${String(n).padStart(6, "0")}`;
 }
 
+export function wallTitle(event: { title?: string | null } | null | undefined): string {
+  const title = event?.title?.trim();
+  return title && title.length > 0 ? title : "THE WALL";
+}
+
+export function isDefaultWallTitle(title: string): boolean {
+  return title.trim().toUpperCase() === "THE WALL";
+}
+
+export function formatEditionNumber(n: number): string {
+  return `№${String(n).padStart(3, "0")}`;
+}
+
+export function parseEdition(value: string): number | null {
+  const stripped = value.trim().replace(/^[№#]/, "");
+  if (!/^\d{1,6}$/.test(stripped)) return null;
+  const n = Number.parseInt(stripped, 10);
+  if (!Number.isInteger(n) || n < 1) return null;
+  return n;
+}
+
+export function editionPath(n: number): string {
+  return `/archive/${String(n).padStart(3, "0")}`;
+}
+
+export function editionMessagePath(edition: number, publicNumber: number): string {
+  return `${editionPath(edition)}/${publicNumber}`;
+}
+
+export function editionNumberOf(event: { editionNumber?: number } | null | undefined): number {
+  return event?.editionNumber && event.editionNumber > 0 ? event.editionNumber : 1;
+}
+
+export function formatEditionDate(iso: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
+    .format(new Date(iso))
+    .toUpperCase();
+}
+
 export function parsePublicNumber(value: string): number | null {
   const stripped = value.trim().replace(/^#/, "");
   if (!/^\d{1,8}$/.test(stripped)) return null;

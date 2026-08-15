@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: "Admin sign-in",
+  title: "Steward sign-in",
   robots: { index: false, follow: false, nocache: true },
 };
 
@@ -17,10 +17,12 @@ export default async function AdminLoginPage() {
 
   return (
     <main className="mx-auto max-w-lg px-4 py-24">
-      <p className="kicker text-center">Operations</p>
-      <h1 className="mt-4 text-center font-display text-4xl">Administration</h1>
-      <p className="mt-3 text-center text-sm text-ash">
-        Permanent administrator identities only. This console is not public.
+      <p className="kicker text-center">Stewardship</p>
+      <h1 className="permanence-title mt-5 text-center">Keep the stone clean.</h1>
+      <span className="title-rule mx-auto mt-6 block" aria-hidden="true" />
+      <p className="lede mx-auto mt-6 max-w-md text-center">
+        This console is for operators who moderate the live day and watch a Wall
+        become history. It is not public.
       </p>
       <AdminLoginForm />
     </main>

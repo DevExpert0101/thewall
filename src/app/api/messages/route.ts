@@ -1,8 +1,8 @@
 import { jsonError, jsonOk } from "@/lib/http";
 import { cacheForPhase, eventSlug, getEventSnapshot } from "@/lib/data/event";
-import { listMessages, searchByPublicNumber } from "@/lib/data/messages";
+import { loadSealedEdition } from "@/lib/data/editions";
+import { listMessages, searchPublicMessages } from "@/lib/data/messages";
 import { isSimulation } from "@/lib/env";
-import { parsePublicNumber } from "@/lib/utils";
 import { messagesQuerySchema } from "@/lib/validation";
 import { feedSortForPhase } from "@/lib/wall/feed";
 import type { EventSnapshot } from "@/lib/types";
@@ -20,19 +20,16 @@ export async function GET(request: Request) {
       limit: url.searchParams.get("limit") ?? undefined,
       q: url.searchParams.get("q") ?? undefined,
       salt: url.searchParams.get("salt") ?? undefined,
+      edition: url.searchParams.get("edition") ?? undefined,
     });
-    const event = await getEventSnapshot(eventSlug());
+    const event = parsed.edition
+      ? await loadSealedEdition(parsed.edition)
+      : await getEventSnapshot(eventSlug());
     const sort = feedSortForPhase(event.phase, parsed.sort);
 
-    if (parsed.q) {
-      const n = parsePublicNumber(parsed.q);
-      if (n) {
-        const found = await searchByPublicNumber(event.id, n);
-        return jsonOk(
-          { messages: found ? [found] : [], nextCursor: null },
-          { cache: listCache(event.phase) },
-        );
-      }
+    if (parsed.q?.trim()) {
+      const found = await searchPublicMessages(event.id, parsed.q);
+      return jsonOk({ messages: found, nextCursor: null }, { cache: listCache(event.phase) });
     }
 
     const result = await listMessages({

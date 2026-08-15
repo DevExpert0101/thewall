@@ -48,7 +48,11 @@ export function SiteShell({
                   <Link
                     key={item.href}
                     href={item.href}
-                    data-active={pathname === item.href || (item.href === "/wall" && pathname.startsWith("/message"))}
+                    data-active={
+                      pathname === item.href ||
+                      (item.href === "/wall" && pathname.startsWith("/message")) ||
+                      (item.href === "/archive" && pathname.startsWith("/archive"))
+                    }
                     className={cn("nav-link px-2 sm:px-3")}
                   >
                     {item.label}
@@ -78,6 +82,14 @@ export function SiteShell({
               <span aria-hidden="true"> · </span>
               <Link href="/archive" className="hover:text-paper">
                 Archive
+              </Link>
+              <span aria-hidden="true"> · </span>
+              <Link href="/records" className="hover:text-paper">
+                Records
+              </Link>
+              <span aria-hidden="true"> · </span>
+              <Link href="/#feedback" className="hover:text-paper">
+                Feedback
               </Link>
             </p>
           </div>
