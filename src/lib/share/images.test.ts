@@ -83,6 +83,10 @@ describe("generated images", () => {
       new Request("http://localhost:3000/api/creatives?kind=message&ratio=9:16&number=4"),
     );
     await assertPng(portrait);
+    const archived = await creatives(
+      new Request("http://localhost:3000/api/creatives?kind=message&ratio=1200x630&number=4&edition=1"),
+    );
+    await assertPng(archived);
   });
 
   it("rejects unknown ratios and missing message numbers", async () => {

@@ -2,7 +2,14 @@
 
 import { useState, useSyncExternalStore } from "react";
 import type { SharePayload } from "@/lib/share/copy";
-import { creativeImageUrl, messageNumberFromSharePath, redditShareUrl, telegramShareUrl, xShareUrl } from "@/lib/share/links";
+import {
+  creativeImagePath,
+  editionNumberFromSharePath,
+  messageNumberFromSharePath,
+  redditShareUrl,
+  telegramShareUrl,
+  xShareUrl,
+} from "@/lib/share/links";
 
 type Props = {
   payload: SharePayload;
@@ -69,6 +76,14 @@ export function SharePanel({
   const telegramHref = telegramShareUrl(url, payload.text);
   const redditHref = redditShareUrl(url, payload.title);
   const publicNumber = messageNumberFromSharePath(payload.path);
+  const editionNumber = editionNumberFromSharePath(payload.path);
+  const card = (ratio: "1200x630" | "1:1" | "9:16") =>
+    creativeImagePath({
+      kind: "message",
+      ratio,
+      number: publicNumber ?? undefined,
+      edition: editionNumber ?? undefined,
+    });
 
   return (
     <div className={compact ? "flex flex-wrap items-center gap-1" : "flex flex-col gap-3"}>
@@ -77,7 +92,7 @@ export function SharePanel({
           {publicNumber ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={creativeImageUrl({ kind: "message", ratio: "1200x630", number: publicNumber })}
+              src={card("1200x630")}
               alt=""
               className="share-artifact-image"
             />
@@ -152,7 +167,7 @@ export function SharePanel({
           <p className="kicker text-bronze">This sentence as an image</p>
           <div className="mt-3 flex flex-wrap gap-3">
             <a
-              href={creativeImageUrl({ kind: "message", ratio: "1200x630", number: publicNumber })}
+              href={card("1200x630")}
               className="btn-ghost min-h-11 kicker hover:text-paper"
               rel="nofollow"
               download={`the-wall-${publicNumber}-1200x630.png`}
@@ -162,7 +177,7 @@ export function SharePanel({
               1200×630
             </a>
             <a
-              href={creativeImageUrl({ kind: "message", ratio: "1:1", number: publicNumber })}
+              href={card("1:1")}
               className="btn-ghost min-h-11 kicker hover:text-paper"
               rel="nofollow"
               download={`the-wall-${publicNumber}-square.png`}
@@ -172,7 +187,7 @@ export function SharePanel({
               Square
             </a>
             <a
-              href={creativeImageUrl({ kind: "message", ratio: "9:16", number: publicNumber })}
+              href={card("9:16")}
               className="btn-ghost min-h-11 kicker hover:text-paper"
               rel="nofollow"
               download={`the-wall-${publicNumber}-portrait.png`}

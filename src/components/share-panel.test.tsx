@@ -86,4 +86,20 @@ describe("SharePanel", () => {
     expect(screen.queryByText(/find me before history freezes/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/get your message seen/i)).not.toBeInTheDocument();
   });
+
+  it("loads the preview card from this origin, not localhost", () => {
+    render(
+      <SharePanel
+        payload={sharePayloadForMessage({
+          event: { ...event, phase: "archived", editionNumber: 1 },
+          message: { ...message, publicNumber: 4 },
+          path: "/archive/001/4",
+        })}
+        via="detail"
+        preview
+      />,
+    );
+    const image = document.querySelector("img.share-artifact-image");
+    expect(image).toHaveAttribute("src", "/api/creatives?kind=message&ratio=1200x630&number=4&edition=1");
+  });
 });

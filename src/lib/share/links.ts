@@ -61,21 +61,29 @@ export function oembedEndpoint(canonicalUrl: string, origin = siteUrl()): string
   return href.toString();
 }
 
-export function creativeImageUrl(input: {
+type CreativeImageInput = {
   kind: "countdown" | "milestone" | "message" | "certificate";
   ratio?: string;
   number?: number;
+  edition?: number;
   mark?: number;
   fire?: number;
-  origin?: string;
-}): string {
-  const href = new URL("/api/creatives", input.origin ?? siteUrl());
+};
+
+/** Same-origin path. Use this for <img> and downloads so Vercel never points at localhost. */
+export function creativeImagePath(input: CreativeImageInput): string {
+  const href = new URL("/api/creatives", "https://thewall.local");
   href.searchParams.set("kind", input.kind);
   href.searchParams.set("ratio", input.ratio ?? "1200x630");
   if (input.number) href.searchParams.set("number", String(input.number));
+  if (input.edition) href.searchParams.set("edition", String(input.edition));
   if (input.mark) href.searchParams.set("mark", String(input.mark));
   if (input.fire) href.searchParams.set("fire", String(input.fire));
-  return href.toString();
+  return `${href.pathname}${href.search}`;
+}
+
+export function creativeImageUrl(input: CreativeImageInput & { origin?: string }): string {
+  return `${input.origin ?? siteUrl()}${creativeImagePath(input)}`;
 }
 
 export function messageNumberFromSharePath(path: string): number | null {
@@ -84,4 +92,11 @@ export function messageNumberFromSharePath(path: string): number | null {
   const edition = path.match(/\/archive\/\d{1,6}\/(\d{1,8})(?:\/|$)/);
   if (edition) return Number(edition[1]);
   return null;
+}
+
+export function editionNumberFromSharePath(path: string): number | null {
+  const match = path.match(/^\/archive\/(\d{1,6})(?:\/|$)/);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isInteger(n) && n > 0 ? n : null;
 }

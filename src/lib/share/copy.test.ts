@@ -3,7 +3,7 @@ import { closesInClause, remainClause, remainingLabel, untilOpenClause } from "@
 import { sharePayloadForMessage, sharePayloadForEvent, sharePayloadForMilestone, sharePayloadForWinner, ogCopyForMessage } from "@/lib/share/copy";
 import { cardClockLine, composeCreative, resolveCreativeRatio, CREATIVE_SIZES } from "@/lib/share/compose";
 import { parseMilestoneQuery } from "@/lib/milestones/engine";
-import { creativeImageUrl, messageNumberFromSharePath, parseShareableUrl, redditShareUrl, telegramShareUrl, xShareUrl } from "@/lib/share/links";
+import { creativeImagePath, creativeImageUrl, editionNumberFromSharePath, messageNumberFromSharePath, parseShareableUrl, redditShareUrl, telegramShareUrl, xShareUrl } from "@/lib/share/links";
 import { publicMessageMetadata, publicPageMetadata } from "@/lib/share/metadata";
 import type { EventSnapshot, PublicMessage } from "@/lib/types";
 
@@ -203,8 +203,14 @@ describe("creative compositions", () => {
     expect(creativeImageUrl({ kind: "message", number: 4291 })).toContain("/api/creatives");
     expect(creativeImageUrl({ kind: "message", number: 4291 })).toContain("number=4291");
     expect(creativeImageUrl({ kind: "message", number: 4291 })).not.toContain("utm");
+    expect(creativeImagePath({ kind: "message", number: 4, edition: 1 })).toBe(
+      "/api/creatives?kind=message&ratio=1200x630&number=4&edition=1",
+    );
+    expect(creativeImagePath({ kind: "message", number: 4 })).not.toMatch(/^https?:/);
     expect(messageNumberFromSharePath("/message/4291")).toBe(4291);
     expect(messageNumberFromSharePath("/archive/001/4291")).toBe(4291);
+    expect(editionNumberFromSharePath("/archive/001/4291")).toBe(1);
+    expect(editionNumberFromSharePath("/message/4291")).toBeNull();
     expect(messageNumberFromSharePath("/wall")).toBeNull();
     expect(messageNumberFromSharePath("/certificate/secret")).toBeNull();
   });

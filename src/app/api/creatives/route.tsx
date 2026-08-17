@@ -1,11 +1,10 @@
-import { ImageResponse } from "next/og";
+import { loadEditionMessage, loadSealedEdition } from "@/lib/data/editions";
 import { cacheForPhase, eventSlug, getEventSnapshot } from "@/lib/data/event";
 import { getMessageByNumber } from "@/lib/data/messages";
-import { AppError, ERROR_CODES } from "@/lib/errors";
 import { hasReachedMilestone, parseMilestoneQuery } from "@/lib/milestones/engine";
 import { composeCreative, resolveCreativeRatio, type CreativeKind } from "@/lib/share/compose";
 import { fallbackMonumentImage, renderCreativeImage } from "@/lib/share/render-creative";
-import { parsePublicNumber } from "@/lib/utils";
+import { parseEdition, parsePublicNumber } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -26,14 +25,25 @@ export async function GET(request: Request) {
   const kind = kindRaw as CreativeKind;
 
   try {
-    const event = await getEventSnapshot(eventSlug());
+    const edition = parseEdition(url.searchParams.get("edition") ?? "");
+    const event = edition
+      ? await loadSealedEdition(edition).catch(() => getEventSnapshot(eventSlug()))
+      : await getEventSnapshot(eventSlug());
     let message;
     if (kind === "message" || kind === "certificate") {
       const n = parsePublicNumber(url.searchParams.get("number") ?? "");
       if (!n) {
         return new Response("Missing number.", { status: 400 });
       }
-      message = await getMessageByNumber(event.id, n);
+      if (edition) {
+        try {
+          message = await loadEditionMessage(edition, n);
+        } catch {
+          message = await getMessageByNumber(event.id, n);
+        }
+      } else {
+        message = await getMessageByNumber(event.id, n);
+      }
     }
     let milestone;
     if (kind === "milestone") {
@@ -66,10 +76,7 @@ export async function GET(request: Request) {
         : cacheForPhase(event.phase),
     );
     return image;
-  } catch (error) {
-    if (error instanceof AppError && error.code === ERROR_CODES.MESSAGE_NOT_FOUND) {
-      return new Response("Message not found.", { status: 404 });
-    }
+  } catch {
     const image: ImageResponse = fallbackMonumentImage(ratio);
     image.headers.set("Cache-Control", "public, s-maxage=30");
     return image;

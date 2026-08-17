@@ -3,7 +3,7 @@
 import { SharePanel } from "@/components/share-panel";
 import { milestoneChorus, milestoneHeadline, type Milestone } from "@/lib/milestones/engine";
 import { sharePayloadForMilestone } from "@/lib/share/copy";
-import { creativeImageUrl } from "@/lib/share/links";
+import { creativeImagePath } from "@/lib/share/links";
 import type { EventSnapshot } from "@/lib/types";
 
 export function MilestoneToast({
@@ -16,7 +16,7 @@ export function MilestoneToast({
   onDismiss: () => void;
 }) {
   const payload = sharePayloadForMilestone({ event, milestone });
-  const card = creativeImageUrl(
+  const card = creativeImagePath(
     milestone.kind === "message"
       ? { kind: "milestone", mark: milestone.value }
       : { kind: "milestone", fire: milestone.value },

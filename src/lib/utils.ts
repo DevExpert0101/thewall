@@ -162,14 +162,18 @@ function asOrigin(value: string | undefined): string | null {
   }
 }
 
+function isLocalOrigin(origin: string): boolean {
+  return /localhost|127\.0\.0\.1/i.test(origin);
+}
+
 export function siteUrl(): string {
-  const explicit = asOrigin(process.env.NEXT_PUBLIC_SITE_URL);
-  if (explicit) return explicit;
-  if (typeof window === "undefined") {
-    const prod = asOrigin(process.env.VERCEL_PROJECT_PRODUCTION_URL);
-    if (prod) return prod;
-    const preview = asOrigin(process.env.VERCEL_URL);
-    if (preview) return preview;
+  if (typeof window !== "undefined") {
+    return window.location.origin;
   }
-  return "http://localhost:3000";
+  const explicit = asOrigin(process.env.NEXT_PUBLIC_SITE_URL);
+  const hosted =
+    asOrigin(process.env.VERCEL_PROJECT_PRODUCTION_URL) ?? asOrigin(process.env.VERCEL_URL);
+  if (explicit && !isLocalOrigin(explicit)) return explicit;
+  if (hosted) return hosted;
+  return explicit ?? "http://localhost:3000";
 }
