@@ -278,14 +278,10 @@ function clearLiveSimulation() {
   startsAtOverride = null;
 }
 
-function isTestRuntime() {
-  return process.env.VITEST === "true" || process.env.NODE_ENV === "test";
-}
-
 export function isSimulatedWallStarted(): boolean {
   ensureLoaded();
-  if (startedOverride !== null) return startedOverride;
-  return isTestRuntime();
+  if (startedOverride === false) return false;
+  return true;
 }
 
 /** Full wipe, including sealed editions. Used by tests. */

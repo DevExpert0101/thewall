@@ -126,6 +126,7 @@ export function LandingHero({
         : "The Wall has closed";
 
   return (
+    <>
     <section className="hero-monument" data-presentation={presentation}>
       <div className="hero-wall" aria-hidden="true">
         <video
@@ -265,6 +266,12 @@ export function LandingHero({
         editionNumber={editionNumberOf(view)}
       />
     </section>
+    <LandingStatRow
+      messages={view.totalMessages}
+      reactions={view.totalReactions}
+      phase={phase}
+    />
+    </>
   );
 }
 
@@ -282,6 +289,56 @@ function HeroWitness({
         {formatObjectIdentity(message.publicNumber, edition)} · {formatCount(message.reactionCount)} 🔥
       </figcaption>
     </figure>
+  );
+}
+
+function LandingStatRow({
+  messages,
+  reactions,
+  phase,
+}: {
+  messages: number;
+  reactions: number;
+  phase: EventSnapshot["phase"];
+}) {
+  const clock =
+    phase === "live" ? "Open" : phase === "upcoming" ? "Soon" : "Closed";
+  return (
+    <section className="stat-row" aria-label="Wall totals">
+      <div className="mx-auto grid max-w-6xl grid-cols-3">
+        <StatTablet label="Voices" value={formatCount(messages)} />
+        <StatTablet label="Fire" value={formatCount(reactions)} ember />
+        <StatTablet label="The clock" value={clock} live={phase === "live"} />
+      </div>
+    </section>
+  );
+}
+
+function StatTablet({
+  label,
+  value,
+  live = false,
+  ember = false,
+}: {
+  label: string;
+  value: string;
+  live?: boolean;
+  ember?: boolean;
+}) {
+  return (
+    <div className="stat-tablet">
+      <p className={`stat-value ${live ? "text-ember" : ember ? "text-flame" : "text-paper"}`}>
+        {live ? (
+          <span className="inline-flex items-center justify-center gap-2">
+            <span className="live-dot" aria-hidden="true" />
+            {value}
+          </span>
+        ) : (
+          value
+        )}
+      </p>
+      <p className="kicker mt-3">{label}</p>
+    </div>
   );
 }
 

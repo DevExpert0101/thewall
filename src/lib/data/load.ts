@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { connection } from "next/server";
 import { eventSlug, getEventSnapshot } from "@/lib/data/event";
 import { listSealedEditions } from "@/lib/data/editions";
@@ -28,8 +29,8 @@ export async function loadEvent(): Promise<EventSnapshot> {
     try {
       await connection();
       await syncSimulatedCloseFromCookie();
-    } catch {
-      // request cookies / connection() are unavailable in some workers and tests
+    } catch (error) {
+      unstable_rethrow(error);
     }
   }
   try {
@@ -53,8 +54,8 @@ export async function loadArchiveEditions(): Promise<EditionSummary[]> {
     try {
       await connection();
       await syncSimulatedCloseFromCookie();
-    } catch {
-      // request cookies / connection() are unavailable in some workers and tests
+    } catch (error) {
+      unstable_rethrow(error);
     }
   }
   return listSealedEditions();

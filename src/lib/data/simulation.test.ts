@@ -434,6 +434,15 @@ describe("live simulation", () => {
     expect(() => assertNotSimulatedInProduction("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")).not.toThrow();
   });
 
+  it("opens the mock wall on Vercel instead of an empty waiting room", () => {
+    vi.stubEnv("VERCEL", "1");
+    resetSimulationState();
+    const event = currentSimulatedEvent();
+    expect(event.phase).toBe("live");
+    expect(event.totalMessages).toBeGreaterThan(0);
+    expect(event.totalReactions).toBeGreaterThan(0);
+  });
+
   it("serves the local Wall for reads when Vercel production has no Supabase", async () => {
     vi.stubEnv("VERCEL_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");

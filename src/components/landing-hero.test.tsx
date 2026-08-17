@@ -63,6 +63,7 @@ describe("landing event states", () => {
     expect(screen.getByRole("link", { name: /watch the wall/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /share the opening/i })).toBeInTheDocument();
     expect(screen.getByText(/the waiting room is open/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Wall totals")).toHaveTextContent("Soon");
     expect(screen.queryByRole("button", { name: /leave your mark/i })).not.toBeInTheDocument();
   });
 
@@ -81,6 +82,40 @@ describe("landing event states", () => {
     expect(screen.queryByText(/thousands of viewers/i)).not.toBeInTheDocument();
   });
 
+  it("keeps the lower totals in lockstep with the live pulse", async () => {
+    vi.mocked(fetch).mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            phase: "live",
+            serverNow: "2026-08-16T20:00:00.000Z",
+            totalMessages: 19,
+            totalReactions: 405,
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      ),
+    );
+    render(
+      <LandingHero
+        event={event({
+          phase: "upcoming",
+          serverNow: "2026-08-16T12:00:00.000Z",
+          totalMessages: 0,
+          totalReactions: 0,
+        })}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByText("19")).toHaveLength(2);
+      expect(screen.getAllByText("405")).toHaveLength(2);
+    });
+    expect(screen.getByLabelText("Wall totals")).toHaveTextContent("Open");
+  });
+
   it("explains the product in the first screen while live", () => {
     render(<LandingHero event={event()} />);
     expect(screen.getByRole("heading", { name: /the\s*wall/i })).toBeInTheDocument();
@@ -91,8 +126,9 @@ describe("landing event states", () => {
       expect(screen.getByText(line)).toBeInTheDocument();
     }
     expect(screen.getByText(/happening now/i)).toBeInTheDocument();
-    expect(screen.getByText("12")).toBeInTheDocument();
-    expect(screen.getByText("40")).toBeInTheDocument();
+    expect(screen.getAllByText("12").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("40").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByLabelText("Wall totals")).toHaveTextContent("Open");
     expect(screen.getByRole("button", { name: /leave your mark — \$1/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /watch the wall/i })).toBeInTheDocument();
     expect(screen.getByText(/reading is free/i)).toBeInTheDocument();

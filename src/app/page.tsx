@@ -8,11 +8,10 @@ import { MessageCard } from "@/components/message-card";
 import { WitnessPlaque } from "@/components/witness-plaque";
 import { loadEvent, loadLandingWitness, loadLatestPublicWinner } from "@/lib/data/load";
 import { publicPageMetadata } from "@/lib/share/metadata";
-import { formatCount } from "@/lib/utils";
 import type { Metadata } from "next";
 import type { PublicMessage } from "@/lib/types";
 
-export const revalidate = 5;
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const event = await loadEvent();
@@ -29,21 +28,6 @@ export default async function HomePage() {
     <main>
       <JsonLd event={event} />
       <LandingHero event={event} featured={featured} />
-
-      <section className="stat-row">
-        <div className="mx-auto grid max-w-6xl grid-cols-3">
-          <Stat
-            label="Voices"
-            value={formatCount(event.totalMessages)}
-          />
-          <Stat label="Fire" value={formatCount(event.totalReactions)} ember />
-          <Stat
-            label="The clock"
-            value={event.phase === "live" ? "Open" : event.phase === "upcoming" ? "Soon" : "Closed"}
-            live={event.phase === "live"}
-          />
-        </div>
-      </section>
 
       {carved.length > 0 ? (
         <section className="section-monument">
@@ -156,36 +140,6 @@ async function resolveShrine(
     publishedAt: event.finalizedAt ?? event.endsAt,
     finalRank: 1,
   };
-}
-
-function Stat({
-  label,
-  value,
-  live = false,
-  ember = false,
-}: {
-  label: string;
-  value: string;
-  live?: boolean;
-  ember?: boolean;
-}) {
-  return (
-    <div className="stat-tablet">
-      <p
-        className={`stat-value ${live ? "text-ember" : ember ? "text-flame" : "text-paper"}`}
-      >
-        {live ? (
-          <span className="inline-flex items-center justify-center gap-2">
-            <span className="live-dot" aria-hidden="true" />
-            {value}
-          </span>
-        ) : (
-          value
-        )}
-      </p>
-      <p className="kicker mt-3">{label}</p>
-    </div>
-  );
 }
 
 function Step({ n, title, body }: { n: string; title: string; body: string }) {
