@@ -4,6 +4,7 @@ import {
   assertProductionEnv,
   evaluateProductionEnv,
   isDummyTurnstile,
+  isNextProductionBuild,
   isVercelProduction,
 } from "@/lib/env/production";
 import { AppError } from "@/lib/errors";
@@ -29,6 +30,8 @@ describe("production environment contract", () => {
     expect(evaluateProductionEnv(valid)).toEqual([]);
     expect(isVercelProduction("production")).toBe(true);
     expect(isVercelProduction("preview")).toBe(false);
+    expect(isNextProductionBuild("phase-production-build")).toBe(true);
+    expect(isNextProductionBuild("phase-production-server")).toBe(false);
   });
 
   it("rejects localhost, dummy Turnstile, simulation, and the zero treasury", () => {

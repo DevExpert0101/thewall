@@ -48,6 +48,29 @@ describe("edge proxy matcher", () => {
   });
 });
 
+describe("twitter image route config", () => {
+  it("declares runtime and revalidate in the twitter-image file so Next can see them", () => {
+    const files = [
+      "src/app/twitter-image.tsx",
+      "src/app/open/twitter-image.tsx",
+      "src/app/open/opengraph-image.tsx",
+      "src/app/wall/twitter-image.tsx",
+      "src/app/archive/twitter-image.tsx",
+      "src/app/message/[number]/twitter-image.tsx",
+      "src/app/monument/twitter-image.tsx",
+      "src/app/monument/[number]/twitter-image.tsx",
+      "src/app/archive/[edition]/[number]/twitter-image.tsx",
+    ];
+    for (const file of files) {
+      const src = readFileSync(file, "utf8");
+      expect(src).toContain("export const runtime");
+      expect(src).toContain("export const revalidate");
+      expect(src).not.toMatch(/export \{[^}]*\bruntime\b/);
+      expect(src).not.toMatch(/export \{[^}]*\brevalidate\b/);
+    }
+  });
+});
+
 describe("deploy surface", () => {
   it("allows Turnstile, Supabase, Base, Coinbase, and WalletConnect in CSP", () => {
     const header = contentSecurityPolicy("nonce", false);

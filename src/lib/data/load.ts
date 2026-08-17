@@ -3,7 +3,7 @@ import { eventSlug, getEventSnapshot } from "@/lib/data/event";
 import { listSealedEditions } from "@/lib/data/editions";
 import { syncSimulatedCloseFromCookie } from "@/lib/data/simulation-session";
 import { hasSupabaseConfig, isSimulation } from "@/lib/env";
-import { isVercelProduction } from "@/lib/env/production";
+import { isNextProductionBuild, isVercelProduction } from "@/lib/env/production";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { publicWinnerFrom, type PublicWinner } from "@/lib/ownership/winner";
 import type { EditionSummary, EventSnapshot, PublicMessage } from "@/lib/types";
@@ -35,7 +35,7 @@ export async function loadEvent(): Promise<EventSnapshot> {
   try {
     return await getEventSnapshot(eventSlug());
   } catch (error) {
-    if (isVercelProduction()) throw error;
+    if (isVercelProduction() && !isNextProductionBuild()) throw error;
     const incomplete =
       isSimulation() ||
       !hasSupabaseConfig() ||

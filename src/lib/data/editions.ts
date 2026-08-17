@@ -15,6 +15,7 @@ import {
   listSimulatedMessages,
 } from "@/lib/data/simulation";
 import { hasSupabaseConfig, isSimulation } from "@/lib/env";
+import { isVercelProduction } from "@/lib/env/production";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { remember } from "@/lib/perf/ttl-cache";
 import { createServiceSupabase } from "@/lib/supabase/admin";
@@ -68,6 +69,9 @@ async function allPublicMessages(eventId: string): Promise<PublicMessage[]> {
 }
 
 export async function listSealedEditions(): Promise<EditionSummary[]> {
+  if (isVercelProduction() && !hasSupabaseConfig()) {
+    return [];
+  }
   if (isSimulation() || !hasSupabaseConfig()) {
     return listSimulatedEditions();
   }
