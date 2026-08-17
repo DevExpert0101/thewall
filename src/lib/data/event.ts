@@ -2,7 +2,6 @@ import { cache } from "react";
 import { PRICE_USDC } from "@/lib/constants";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { deriveEventPhase } from "@/lib/event/state";
-import { isNextProductionBuild, isVercelProduction } from "@/lib/env/production";
 import {
   getNetwork,
   getTreasuryAddress,
@@ -116,38 +115,7 @@ async function resolveOpenEventSlug(preferredSlug: string): Promise<string> {
   return open?.slug ?? preferredSlug;
 }
 
-function unconfiguredBuildEvent(): EventSnapshot {
-  const now = new Date().toISOString();
-  return {
-    id: "unconfigured",
-    slug: eventSlug(),
-    title: "THE WALL",
-    startsAt: now,
-    endsAt: now,
-    archivedAt: null,
-    finalizedAt: null,
-    phase: "upcoming",
-    serverNow: now,
-    totalMessages: 0,
-    totalReactions: 0,
-    treasuryAddress: null,
-    network: "base",
-    priceUsdc: PRICE_USDC,
-    editionNumber: 1,
-  };
-}
-
 async function snapshotFromSlug(slug: string, finalize: boolean): Promise<EventSnapshot> {
-  if (isVercelProduction() && (isSimulation() || !hasSupabaseConfig())) {
-    if (isNextProductionBuild()) {
-      return unconfiguredBuildEvent();
-    }
-    throw new AppError(
-      ERROR_CODES.CONFIG,
-      "The live Wall is not configured.",
-      503,
-    );
-  }
   if (isSimulation() || !hasSupabaseConfig()) {
     return currentSimulatedEvent();
   }

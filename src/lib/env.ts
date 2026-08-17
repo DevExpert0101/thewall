@@ -121,9 +121,9 @@ function flagOn(value: string | undefined): boolean | null {
   return null;
 }
 
-/** Local mock of the single Wall. Never on Vercel production. */
+/** Local mock of the single Wall. Never used once a live Supabase project is configured. */
 export function isSimulation(): boolean {
-  if (isVercelProduction()) return false;
+  if (isVercelProduction() && hasSupabaseConfig()) return false;
   const flagged = flagOn(
     process.env.NEXT_PUBLIC_SIMULATE_LIVE ?? process.env.SIMULATE_LIVE,
   );

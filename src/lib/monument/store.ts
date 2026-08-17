@@ -2,7 +2,6 @@ import "server-only";
 
 import { listSimulatedMonumentEntries, getSimulatedMonumentEntry, simulatedMonumentCapacity } from "@/lib/data/simulation";
 import { hasSupabaseConfig, isSimulation } from "@/lib/env";
-import { isVercelProduction } from "@/lib/env/production";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { monumentCanvasFrom, monumentCanvasFromEnv } from "@/lib/monument/canvas";
 import { monumentFromSealedWall } from "@/lib/monument/from-archive";
@@ -77,20 +76,7 @@ function fromRow(row: MonumentRow): MonumentEntry {
   };
 }
 
-function emptyMonumentCatalog(): MonumentCatalog {
-  const canvas = monumentCanvasFromEnv();
-  return {
-    entries: [],
-    sealedCount: 0,
-    capacity: parseMonumentCapacity(process.env.MONUMENT_CAPACITY),
-    canvas,
-  };
-}
-
 export async function listMonumentEntries(): Promise<MonumentCatalog> {
-  if (isVercelProduction() && !hasSupabaseConfig()) {
-    return emptyMonumentCatalog();
-  }
   if (isSimulation() || !hasSupabaseConfig()) {
     const entries = listSimulatedMonumentEntries();
     const canvas = monumentCanvasFromEnv();
@@ -133,9 +119,6 @@ export async function listMonumentEntries(): Promise<MonumentCatalog> {
 }
 
 export async function loadMonumentEntry(monumentNumber: number): Promise<MonumentEntry> {
-  if (isVercelProduction() && !hasSupabaseConfig()) {
-    throw new AppError(ERROR_CODES.MESSAGE_NOT_FOUND, "Monument entry not found.", 404);
-  }
   if (isSimulation() || !hasSupabaseConfig()) {
     const entry = getSimulatedMonumentEntry(monumentNumber);
     if (!entry) {

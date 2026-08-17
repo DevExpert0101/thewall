@@ -35,7 +35,6 @@ export async function loadEvent(): Promise<EventSnapshot> {
   try {
     return await getEventSnapshot(eventSlug());
   } catch (error) {
-    if (isVercelProduction() && !isNextProductionBuild()) throw error;
     const incomplete =
       isSimulation() ||
       !hasSupabaseConfig() ||
@@ -44,6 +43,7 @@ export async function loadEvent(): Promise<EventSnapshot> {
       const { currentSimulatedEvent } = await import("@/lib/data/simulation");
       return currentSimulatedEvent();
     }
+    if (isVercelProduction() && !isNextProductionBuild()) throw error;
     throw error;
   }
 }

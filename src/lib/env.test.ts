@@ -78,12 +78,20 @@ afterEach(() => {
 });
 
 describe("simulation lock", () => {
-  it("never treats Vercel production as the local mock wall", () => {
+  it("never mocks the Wall once Vercel production has Supabase", () => {
     vi.stubEnv("VERCEL_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_SIMULATE_LIVE", "true");
     vi.stubEnv("SIMULATE_LIVE", "true");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
+    expect(isSimulation()).toBe(false);
+  });
+
+  it("keeps the local Wall readable on Vercel when Supabase is not configured", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SIMULATE_LIVE", "true");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
-    expect(isSimulation()).toBe(false);
+    expect(isSimulation()).toBe(true);
   });
 });

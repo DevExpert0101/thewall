@@ -434,14 +434,14 @@ describe("live simulation", () => {
     expect(() => assertNotSimulatedInProduction("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")).not.toThrow();
   });
 
-  it("does not serve the mock monument from the event snapshot in Vercel production", async () => {
+  it("serves the local Wall for reads when Vercel production has no Supabase", async () => {
     vi.stubEnv("VERCEL_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
     const { getEventSnapshot } = await import("@/lib/data/event");
-    await expect(getEventSnapshot("the-wall")).rejects.toMatchObject({
-      code: ERROR_CODES.CONFIG,
-    });
+    const event = await getEventSnapshot("the-wall");
+    expect(event.id).toBe("local");
+    expect(event.phase).toBe("live");
   });
 });
 
