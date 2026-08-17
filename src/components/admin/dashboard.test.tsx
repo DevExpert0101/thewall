@@ -2,10 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AdminDashboard } from "@/components/admin/dashboard";
+import { AdminModerationPanel } from "@/components/admin/moderation-panel";
+import { AdminSystemPanel } from "@/components/admin/system-panel";
+import { AdminWallDesk } from "@/components/admin/wall-desk";
 import { emptyAdminOps, type AdminOverview } from "@/lib/admin/types";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  usePathname: () => "/admin",
 }));
 
 const config = {
@@ -84,27 +88,28 @@ const overview: AdminOverview = {
 };
 
 describe("admin dashboard", () => {
-  it("lets a steward configure this Wall without exposing secret material", () => {
-    const { container } = render(<AdminDashboard initial={overview} email="ops@example.com" />);
-    expect(screen.getByText(/current edition/i)).toBeInTheDocument();
+  it("opens on a command center instead of one long page", () => {
+    const { container } = render(<AdminDashboard initial={overview} />);
+    expect(screen.getByRole("heading", { name: /today's wall/i })).toBeInTheDocument();
     expect(screen.getByText(/^launch$/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /waiting room/i })).toHaveAttribute("href", "/open");
     expect(screen.getByRole("link", { name: /^invite/i })).toHaveAttribute("href", "/invite");
     expect(screen.getByRole("link", { name: /stream mode/i })).toHaveAttribute("href", "/watch/stream");
+    expect(screen.getByRole("link", { name: /open reports/i })).toHaveAttribute("href", "/admin/moderation");
+    expect(screen.getByRole("link", { name: /this wall/i })).toHaveAttribute("href", "/admin/wall");
+    expect(screen.getByRole("link", { name: /system/i })).toHaveAttribute("href", "/admin/system");
+    expect(screen.queryByLabelText(/^title$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/message search/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/payment lookup/i)).not.toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/eyJ|SERVICE_ROLE|sk_live/);
+  });
+
+  it("keeps wall controls on their own desk", () => {
+    const { container } = render(<AdminWallDesk initial={overview} />);
     expect(screen.getByRole("heading", { name: /this wall/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/^title$/i)).toHaveValue("THE WALL");
     expect(screen.getByRole("button", { name: /save this wall/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /close for review/i })).toBeInTheDocument();
-    expect(screen.getByText(/review rankings/i)).toBeInTheDocument();
-    expect(screen.getByText(/archive library/i)).toBeInTheDocument();
-    expect(screen.getByText(/message search/i)).toBeInTheDocument();
-    expect(screen.getByText(/reports queue/i)).toBeInTheDocument();
-    expect(screen.getByText(/visitor notes/i)).toBeInTheDocument();
-    expect(screen.getByText(/moderation audit log/i)).toBeInTheDocument();
-    expect(screen.getByText(/payment lookup/i)).toBeInTheDocument();
-    expect(screen.getByText(/reaction integrity/i)).toBeInTheDocument();
-    expect(screen.getByText(/no suspicious/i)).toBeInTheDocument();
-    expect(screen.getByText(/system health/i)).toBeInTheDocument();
     expect(screen.getByText(/launch day/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^event$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^traffic$/i })).toBeInTheDocument();
@@ -117,7 +122,7 @@ describe("admin dashboard", () => {
 
   it("shows suspicious 🔥 patterns without raw addresses", () => {
     const { container } = render(
-      <AdminDashboard
+      <AdminSystemPanel
         initial={{
           ...overview,
           reactionSignals: [
@@ -130,12 +135,12 @@ describe("admin dashboard", () => {
             },
           ],
         }}
-        email="ops@example.com"
       />,
     );
     expect(screen.getByText(/reaction integrity/i)).toBeInTheDocument();
     expect(screen.getByText(/visitors are not silently dropped/i)).toBeInTheDocument();
     expect(screen.getByText(/addr:9bf2a812c1d0/i)).toBeInTheDocument();
+    expect(screen.getByText(/system health/i)).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/192\.168\.|10\.\d+\.|wall[_-]?key/i);
     expect(screen.queryByText(/no suspicious/i)).not.toBeInTheDocument();
   });
@@ -152,7 +157,7 @@ describe("admin dashboard", () => {
       );
     });
     vi.stubGlobal("fetch", fetchMock);
-    render(<AdminDashboard initial={overview} email="ops@example.com" />);
+    render(<AdminWallDesk initial={overview} />);
     await user.clear(screen.getByLabelText(/^title$/i));
     await user.type(screen.getByLabelText(/^title$/i), "THE WALL №002");
     await user.click(screen.getByRole("button", { name: /save this wall/i }));
@@ -163,31 +168,28 @@ describe("admin dashboard", () => {
   });
 
   it("asks stewards to review rankings before disclosing a closed wall", () => {
-    render(
-      <AdminDashboard
-        initial={{
-          ...overview,
-          config: { ...overview.config, phase: "finalizing", remainingMinutes: 0 },
-          reviewRanks: [
-            {
-              id: "m1",
-              publicNumber: 4,
-              text: "I hope we still have fifty years.",
-              reactionCount: 12,
-              publishedAt: "2026-08-13T10:00:00.000Z",
-              removedAt: null,
-              moderationStatus: "approved",
-              removalReasonCode: null,
-            },
-          ],
-        }}
-        email="ops@example.com"
-      />,
-    );
-    expect(screen.getByText(/under review/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/remove illegal or immoral sentences/i).length).toBeGreaterThan(0);
+    const closed = {
+      ...overview,
+      config: { ...overview.config, phase: "finalizing" as const, remainingMinutes: 0 },
+      reviewRanks: [
+        {
+          id: "m1",
+          publicNumber: 4,
+          text: "I hope we still have fifty years.",
+          reactionCount: 12,
+          publishedAt: "2026-08-13T10:00:00.000Z",
+          removedAt: null,
+          moderationStatus: "approved",
+          removalReasonCode: null,
+        },
+      ],
+    };
+    const { unmount } = render(<AdminModerationPanel initial={closed} />);
+    expect(screen.getByText(/remove illegal or immoral sentences/i)).toBeInTheDocument();
     expect(screen.getByText(/rank #1/i)).toBeInTheDocument();
     expect(screen.getByText(/fifty years/i)).toBeInTheDocument();
+    unmount();
+    render(<AdminWallDesk initial={closed} />);
     expect(screen.getByRole("button", { name: /finish this wall/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /close for review/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /start this wall/i })).not.toBeInTheDocument();
@@ -195,7 +197,7 @@ describe("admin dashboard", () => {
 
   it("requires confirmation before a removal can be submitted", async () => {
     const user = userEvent.setup();
-    render(<AdminDashboard initial={overview} email="ops@example.com" />);
+    render(<AdminModerationPanel initial={overview} />);
     await user.click(screen.getByRole("button", { name: /remove message/i }));
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^confirm$/i })).toBeDisabled();

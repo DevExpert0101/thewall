@@ -71,7 +71,7 @@ export function AdminLaunchOps({
   }
 
   return (
-    <section>
+    <section className="admin-panel">
       <h2 className="kicker">Launch day</h2>
       <p className="mt-2 text-sm text-mist">
         Live counts from the working copy. Unique viewers are never invented.

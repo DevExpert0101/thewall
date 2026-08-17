@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { AdminDashboard } from "@/components/admin/dashboard";
+import { AdminShell } from "@/components/admin/shell";
 import { peekAdmin } from "@/lib/auth";
-import { loadAdminOverview } from "@/lib/admin/data";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -12,13 +11,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true },
 };
 
-export default async function AdminPage() {
+export default async function AdminConsoleLayout({ children }: { children: React.ReactNode }) {
   const admin = await peekAdmin();
   if (!admin) redirect("/admin/login");
-  const overview = await loadAdminOverview();
-  return (
-    <main>
-      <AdminDashboard initial={overview} email={admin.email} />
-    </main>
-  );
+  return <AdminShell email={admin.email}>{children}</AdminShell>;
 }

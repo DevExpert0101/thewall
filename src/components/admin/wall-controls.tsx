@@ -159,7 +159,7 @@ export function AdminWallControls({
   }
 
   return (
-    <section>
+    <section className="admin-panel">
       <h2 className="kicker">This Wall</h2>
       <p className="mt-2 text-sm text-mist">
         {expired
