@@ -77,7 +77,7 @@ export async function GET(request: Request) {
     );
     return image;
   } catch {
-    const image: ImageResponse = fallbackMonumentImage(ratio);
+    const image = fallbackMonumentImage(ratio);
     image.headers.set("Cache-Control", "public, s-maxage=30");
     return image;
   }
