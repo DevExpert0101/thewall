@@ -38,6 +38,16 @@ describe("instrumentation", () => {
   });
 });
 
+describe("edge proxy matcher", () => {
+  it("skips public read APIs and generated images so pulse traffic is not an Edge invoke", () => {
+    const src = readFileSync("src/proxy.ts", "utf8");
+    expect(src).toContain("api/");
+    expect(src).toContain("opengraph-image");
+    expect(src).toContain("twitter-image");
+    expect(src).not.toContain("x-nonce");
+  });
+});
+
 describe("deploy surface", () => {
   it("allows Turnstile, Supabase, Base, Coinbase, and WalletConnect in CSP", () => {
     const header = contentSecurityPolicy("nonce", false);

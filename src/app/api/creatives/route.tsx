@@ -2,6 +2,7 @@ import { ImageResponse } from "next/og";
 import { cacheForPhase, eventSlug, getEventSnapshot } from "@/lib/data/event";
 import { getMessageByNumber } from "@/lib/data/messages";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { hasReachedMilestone, parseMilestoneQuery } from "@/lib/milestones/engine";
 import { composeCreative, resolveCreativeRatio, type CreativeKind } from "@/lib/share/compose";
 import { fallbackMonumentImage, renderCreativeImage } from "@/lib/share/render-creative";
 import { parsePublicNumber } from "@/lib/utils";
@@ -34,9 +35,36 @@ export async function GET(request: Request) {
       }
       message = await getMessageByNumber(event.id, n);
     }
-    const copy = composeCreative({ kind, event, message });
+    let milestone;
+    if (kind === "milestone") {
+      const requested = parseMilestoneQuery({
+        mark: url.searchParams.get("mark"),
+        fire: url.searchParams.get("fire"),
+      });
+      if (url.searchParams.get("mark") || url.searchParams.get("fire")) {
+        if (!requested) {
+          return new Response("Unknown milestone.", { status: 400 });
+        }
+        if (
+          !hasReachedMilestone(
+            { messages: event.totalMessages, reactions: event.totalReactions },
+            requested,
+          )
+        ) {
+          return new Response("Milestone not reached.", { status: 404 });
+        }
+        milestone = requested;
+      }
+    }
+    const copy = composeCreative({ kind, event, message, milestone });
     const image = renderCreativeImage(copy, ratio);
-    image.headers.set("Cache-Control", cacheForPhase(event.phase));
+    const immutableShare = kind === "message" || kind === "certificate";
+    image.headers.set(
+      "Cache-Control",
+      immutableShare
+        ? "public, s-maxage=3600, stale-while-revalidate=86400"
+        : cacheForPhase(event.phase),
+    );
     return image;
   } catch (error) {
     if (error instanceof AppError && error.code === ERROR_CODES.MESSAGE_NOT_FOUND) {

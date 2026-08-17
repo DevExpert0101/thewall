@@ -55,5 +55,35 @@ describe("SharePanel", () => {
       expect.stringContaining("reddit.com/submit"),
     );
     expect(screen.getByRole("button", { name: /discord/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /1200×630/i })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/api/creatives"),
+    );
+    expect(screen.getByRole("link", { name: /1200×630/i })).toHaveAttribute(
+      "href",
+      expect.stringContaining("ratio=1200x630"),
+    );
+    expect(screen.getByRole("link", { name: /square card/i })).toHaveAttribute(
+      "href",
+      expect.stringContaining("ratio=1%3A1"),
+    );
+    expect(screen.getByRole("link", { name: /portrait card/i })).toHaveAttribute(
+      "href",
+      expect.stringContaining("ratio=9%3A16"),
+    );
+  });
+
+  it("can preview the generated share text without posting it", () => {
+    render(
+      <SharePanel
+        payload={sharePayloadForMessage({ event, message })}
+        via="publish"
+        preview
+      />,
+    );
+    expect(screen.getByText(/“I hope we were trying.”/)).toBeInTheDocument();
+    expect(screen.getByText(/Message #004291 on The Wall №001/)).toBeInTheDocument();
+    expect(screen.queryByText(/find me before history freezes/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/get your message seen/i)).not.toBeInTheDocument();
   });
 });

@@ -67,10 +67,13 @@ describe("wall feed", () => {
   });
 
   it("locks time-varying sorts after the wall closes", () => {
-    expect(feedSortForPhase("live", "trending")).toBe("trending");
-    expect(feedSortForPhase("upcoming", "hour")).toBe("hour");
-    expect(feedSortForPhase("finalizing", "trending")).toBe("hot");
+    expect(feedSortForPhase("live", "rising")).toBe("rising");
+    expect(feedSortForPhase("live", "trending")).toBe("rising");
+    expect(feedSortForPhase("upcoming", "hour")).toBe("rising");
+    expect(feedSortForPhase("finalizing", "rising")).toBe("hot");
     expect(feedSortForPhase("archived", "hour")).toBe("hot");
+    expect(feedSortForPhase("archived", "gems")).toBe("gems");
+    expect(feedSortForPhase("archived", "final")).toBe("final");
     expect(feedSortForPhase("archived", "new")).toBe("new");
   });
 });

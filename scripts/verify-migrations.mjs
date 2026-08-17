@@ -142,6 +142,8 @@ async function main() {
   console.log("\nSchema and seed");
   await execFile(db, path.join(testsDir, "verify.sql"));
   assert(true, "verify.sql completed");
+  await execFile(db, path.join(testsDir, "monument.sql"));
+  assert(true, "monument.sql completed");
 
   const tables = await db.query(`
     select table_name
@@ -149,11 +151,12 @@ async function main() {
     where table_schema = 'public'
       and table_name in (
         'events','event_counters','payment_intents','payments','messages',
-        'reactions','message_ownership','reports','moderation_actions','admin_users'
+        'reactions','message_ownership','reports','moderation_actions','admin_users',
+        'admin_ops_actions','monument_entries','monument_state'
       )
     order by table_name
   `);
-  assert(tables.rows.length === 10, "all 10 product tables exist");
+  assert(tables.rows.length === 13, "all 13 product tables exist");
 
   const viewCols = await db.query(`
     select column_name
@@ -289,11 +292,18 @@ async function main() {
     await db.query(`select id from public.messages where public_number = 1`)
   ).rows[0].id;
   const userA = "11111111-1111-1111-1111-111111111111";
+  const idem = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   const fire = await db.query(
-    `select public.add_fire_reaction($1::uuid, $2::uuid) as result`,
-    [messageId, userA],
+    `select public.add_fire_reaction($1::uuid, $2::uuid, $3::uuid) as result`,
+    [messageId, userA, idem],
   );
   assert(asJson(fire.rows[0].result).reaction_count === 1, "first fire increments to 1");
+  const replay = await db.query(
+    `select public.add_fire_reaction($1::uuid, $2::uuid, $3::uuid) as result`,
+    [messageId, userA, idem],
+  );
+  assert(asJson(replay.rows[0].result).reaction_count === 1, "idempotent replay does not increment");
+  assert(asJson(replay.rows[0].result).replayed === true, "idempotent replay is marked");
   await expectError(
     () => db.query(`select public.add_fire_reaction($1::uuid, $2::uuid)`, [messageId, userA]),
     "duplicate_reaction",
@@ -335,6 +345,28 @@ async function main() {
   assert(ranks.rows[0].public_number === 1 && ranks.rows[0].final_rank === 1, "highest 🔥 receives final rank #1");
   assert(ranks.rows[1].public_number === 2 && ranks.rows[1].final_rank === 2, "lower 🔥 receives final rank #2");
 
+  const monument = await db.query(`
+    select monument_number, position, x, y, width, height, sentence_snapshot,
+           original_public_number, final_rank, winning_margin, event_id, message_id
+    from public.monument_entries
+  `);
+  assert(monument.rows.length === 1, "one Monument entry after finalize");
+  assert(monument.rows[0].monument_number === 1, "first Monument number is 1");
+  const expectedPlot = await db.query(`select * from public.monument_plot(1)`);
+  assert(monument.rows[0].position === 1, "first canvas position is 1");
+  assert(monument.rows[0].x === expectedPlot.rows[0].x && monument.rows[0].y === expectedPlot.rows[0].y, "first sentence uses the assigned plot");
+  assert(monument.rows[0].width === expectedPlot.rows[0].width && monument.rows[0].height === expectedPlot.rows[0].height, "every plot uses the equal cell size");
+  assert(monument.rows[0].x >= 0 && monument.rows[0].y >= 0, "plot stays on the canvas");
+  assert(monument.rows[0].sentence_snapshot === "first sentence on the wall", "canvas stores the winning sentence");
+  assert(monument.rows[0].original_public_number === 1, "Victor is the rank #1 inscription");
+  assert(monument.rows[0].final_rank === 1, "Monument stores rank 1");
+  assert(monument.rows[0].winning_margin === 1, "winning margin is winner 🔥 minus second");
+  const sealedEvent = await db.query(`
+    select winning_message_id, monument_entry_id from public.events where id = '${EVENT_ID}'
+  `);
+  assert(sealedEvent.rows[0].winning_message_id === monument.rows[0].message_id, "event stores the Victor");
+  assert(Boolean(sealedEvent.rows[0].monument_entry_id), "event stores the Monument entry");
+
   await db.query(`select public.finalize_event_rankings($1::uuid)`, [EVENT_ID]);
   const ranksAgain = await db.query(`
     select public_number, final_rank from public.messages
@@ -344,6 +376,32 @@ async function main() {
   assert(
     ranksAgain.rows[0].final_rank === 1 && ranksAgain.rows[1].final_rank === 2,
     "finalize is idempotent",
+  );
+  const monumentAgain = await db.query(`
+    select count(*)::int as n, min(monument_number)::int as first
+    from public.monument_entries
+  `);
+  assert(monumentAgain.rows[0].n === 1, "second finalize does not create another Monument entry");
+  assert(monumentAgain.rows[0].first === 1, "Monument number is unchanged");
+  const plotAgain = await db.query(`select position, x, y, sentence_snapshot from public.monument_entries`);
+  assert(plotAgain.rows[0].position === 1 && plotAgain.rows[0].x === monument.rows[0].x && plotAgain.rows[0].y === monument.rows[0].y, "repeat finalize does not move the sentence");
+  assert(plotAgain.rows[0].sentence_snapshot === "first sentence on the wall", "repeat finalize does not rewrite the sentence");
+  const state = await db.query(`select next_number from public.monument_state where singleton = true`);
+  assert(state.rows[0].next_number === 2, "next Monument number advanced once");
+  await expectError(
+    () =>
+      db.exec(`
+        insert into public.monument_entries (
+          monument_number, position, x, y, width, height, sentence_snapshot,
+          event_id, message_id, original_public_number,
+          final_reaction_count, winning_margin, wall_total_messages, wall_total_reactions, sealed_at
+        ) values (
+          2, 2, 280, 0, 280, 168, 'duplicate',
+          '${EVENT_ID}', '${messageId}', 1, 1, 0, 2, 1, now()
+        )
+      `),
+    "monument_entries_event_unique",
+    "duplicate Monument entry for the same Wall is impossible",
   );
 
   await db.exec(`
@@ -387,6 +445,15 @@ async function main() {
     `select moderation_status, removal_reason_code from public.messages where id = '${liveId}'`,
   );
   assert(moderated.rows[0].moderation_status === "removed", "confirmed remove updates the message");
+  const eventFanout = await db.query(
+    `select text from public.public_message_events where public_number = 1`,
+  );
+  if (eventFanout.rows.length > 0) {
+    assert(
+      eventFanout.rows.every((row) => row.text === "Message removed under archive policy."),
+      "remove redacts public_message_events text",
+    );
+  }
   const audit = await db.query(
     `select action, reason from public.moderation_actions where message_id = '${liveId}' order by created_at`,
   );
@@ -503,6 +570,42 @@ async function main() {
     "anon cannot read prize payouts",
   );
   await expectError(
+    () => asAnon(() => db.query("select * from public.claim_challenges")),
+    "permission denied",
+    "anon cannot read claim challenges",
+  );
+  await expectError(
+    () => asAnon(() => db.query("select * from public.claim_sessions")),
+    "permission denied",
+    "anon cannot read claim sessions",
+  );
+  await expectError(
+    () => asAnon(() => db.query("select * from public.claim_attempts")),
+    "permission denied",
+    "anon cannot read claim attempts",
+  );
+  await expectError(
+    () => asAnon(() => db.query("select * from public.reaction_signals")),
+    "permission denied",
+    "anon cannot read reaction signals",
+  );
+  await expectError(
+    () => asAnon(() => db.query("select * from public.reactions")),
+    "permission denied",
+    "anon cannot read reactions",
+  );
+  await expectError(
+    () =>
+      asAnon(() =>
+        db.query(`select public.add_fire_reaction($1::uuid, $2::uuid)`, [
+          "11111111-1111-4111-8111-111111111111",
+          "22222222-2222-4222-8222-222222222222",
+        ]),
+      ),
+    "permission denied",
+    "anon cannot execute add_fire_reaction",
+  );
+  await expectError(
     () => asAnon(() => db.query("select * from public.admin_users")),
     "permission denied",
     "anon cannot read admin_users",
@@ -516,6 +619,11 @@ async function main() {
     () => asAnon(() => db.query("select * from public.moderation_actions")),
     "permission denied",
     "anon cannot read moderation audit",
+  );
+  await expectError(
+    () => asAnon(() => db.query("select * from public.admin_ops_actions")),
+    "permission denied",
+    "anon cannot read operations audit",
   );
   await expectError(
     () =>
@@ -561,6 +669,53 @@ async function main() {
     "permission denied",
     "anon cannot update events",
   );
+  const visibleMonument = await asAnon(() =>
+    db.query("select monument_number, original_public_number from public.public_monument_entries"),
+  );
+  assert(visibleMonument.rows.length === 1, "anon can read public Monument entries");
+  assert(visibleMonument.rows[0].monument_number === 1, "public Monument number is sequential");
+  await expectError(
+    () => asAnon(() => db.query("select next_number from public.monument_state")),
+    "permission denied",
+    "anon cannot read monument_state",
+  );
+  await expectError(
+    () =>
+      asAnon(() =>
+        db.exec(`
+          insert into public.monument_entries (
+            monument_number, position, x, y, width, height, sentence_snapshot,
+            event_id, message_id, original_public_number,
+            final_reaction_count, winning_margin, wall_total_messages, wall_total_reactions, sealed_at
+          ) values (
+            99, 99, 0, 0, 280, 168, 'forged',
+            '${EVENT_ID}', '${messageId}', 1, 1, 0, 2, 1, now()
+          )
+        `),
+      ),
+    "permission denied",
+    "anon cannot create a Monument entry",
+  );
+  await expectError(
+    () => asAnon(() => db.exec(`update public.monument_entries set monument_number = 8`)),
+    "permission denied",
+    "anon cannot modify a Monument entry",
+  );
+  await expectError(
+    () => asAnon(() => db.exec(`update public.events set winning_message_id = null`)),
+    "permission denied",
+    "anon cannot change the Victor",
+  );
+  await expectError(
+    () => asAnon(() => db.exec(`update public.messages set final_rank = 9`)),
+    "permission denied",
+    "anon cannot change final ranks",
+  );
+  await expectError(
+    () => asAnon(() => db.query(`select public.finalize_event_rankings($1::uuid)`, [EVENT_ID])),
+    "permission denied",
+    "anon cannot execute finalize_event_rankings",
+  );
 
   console.log("\nFrozen checkout terms and text hash");
   await expectError(
@@ -604,12 +759,15 @@ async function main() {
   ]);
   const pulseJson = asJson(pulse.rows[0].result);
   assert(pulseJson.total_messages === 2, "wall_pulse returns counter totals");
+  assert(pulseJson.latest_public_number === 2, "wall_pulse returns the latest public number");
   assert(Number(pulseJson.counts[messageId]) === 1, "wall_pulse returns requested reaction counts");
   const hour = await db.query(
-    `select count(*)::int as n from public.hour_reaction_counts($1::uuid, now() - interval '1 hour', 200)`,
+    `select hour_count, hour_minutes from public.hour_reaction_counts($1::uuid, now() - interval '1 hour', 200)`,
     [EVENT_ID],
   );
-  assert(hour.rows[0].n >= 1, "hour_reaction_counts aggregates in the database");
+  assert(hour.rows.length >= 1, "hour_reaction_counts aggregates in the database");
+  assert(Number(hour.rows[0].hour_count) >= 1, "hour_reaction_counts returns unique 🔥 in the window");
+  assert(Number(hour.rows[0].hour_minutes) >= 1, "hour_reaction_counts returns distinct minutes");
   await expectError(
     () => asAnon(() => db.query(`select public.wall_pulse($1::uuid, '{}'::uuid[])`, [EVENT_ID])),
     "permission denied",

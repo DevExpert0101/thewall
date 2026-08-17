@@ -31,13 +31,13 @@ export function createOwnershipToken(): string {
 }
 
 export function createWallKey(): string {
-  const radix = BigInt(WALL_KEY_ALPHABET.length);
-  const bytes = randomBytes(10);
-  let n = BigInt(`0x${bytes.toString("hex")}`);
+  const alphabet = WALL_KEY_ALPHABET.length;
+  const limit = Math.floor(256 / alphabet) * alphabet;
   let canonical = "";
-  for (let i = 0; i < WALL_KEY_LENGTH; i += 1) {
-    canonical = WALL_KEY_ALPHABET[Number(n % radix)] + canonical;
-    n /= radix;
+  while (canonical.length < WALL_KEY_LENGTH) {
+    const byte = randomBytes(1)[0] ?? 255;
+    if (byte >= limit) continue;
+    canonical += WALL_KEY_ALPHABET[byte % alphabet];
   }
   return formatWallKey(canonical);
 }

@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { realtimeChannelName, realtimeEventFilter } from "@/lib/wall/realtime";
+import {
+  realtimeChannelName,
+  realtimeEventFilter,
+  WALL_READER_SUBSCRIBES_TO_POSTGRES,
+} from "@/lib/wall/realtime";
 import { hasSupabaseAuthCookie } from "@/lib/supabase/cookies";
 import { capFeed } from "@/lib/wall/feed";
-import { WALL_MAX_RENDERED } from "@/lib/wall/constants";
-import { pulseQuerySchema } from "@/lib/validation";
+import { SEARCH_MIN_CHARS, SEARCH_RESULT_LIMIT, WALL_MAX_RENDERED, WALL_PAGE_SIZE } from "@/lib/wall/constants";
+import { messagesQuerySchema, pulseQuerySchema } from "@/lib/validation";
+import { BEAT_CACHE_CONTROL, cacheForPhase, pulseCacheControl, PULSE_CACHE_CONTROL } from "@/lib/data/event";
 import type { PublicMessage } from "@/lib/types";
 
 function msg(n: number): PublicMessage {
@@ -20,7 +25,8 @@ function msg(n: number): PublicMessage {
 }
 
 describe("realtime subscription scope", () => {
-  it("filters postgres changes to this event only", () => {
+  it("does not subscribe wall readers to postgres changes", () => {
+    expect(WALL_READER_SUBSCRIBES_TO_POSTGRES).toBe(false);
     const eventId = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11";
     expect(realtimeEventFilter(eventId)).toBe(`event_id=eq.${eventId}`);
     expect(realtimeChannelName(eventId)).toBe(`wall-messages:${eventId}`);
@@ -49,5 +55,23 @@ describe("feed cap", () => {
   it("keeps appended pages under the render budget", () => {
     const page = Array.from({ length: WALL_MAX_RENDERED + 20 }, (_, i) => msg(i + 1));
     expect(capFeed(page).length).toBe(WALL_MAX_RENDERED);
+  });
+});
+
+describe("viral read bounds", () => {
+  it("defaults the messages API to one wall page", () => {
+    expect(messagesQuerySchema.parse({}).limit).toBe(WALL_PAGE_SIZE);
+    expect(SEARCH_MIN_CHARS).toBe(3);
+    expect(SEARCH_RESULT_LIMIT).toBeLessThanOrEqual(24);
+  });
+
+  it("lets the shared CDN cache live event polls", () => {
+    expect(cacheForPhase("live")).toContain("s-maxage=");
+    expect(cacheForPhase("live")).not.toContain("no-store");
+    expect(PULSE_CACHE_CONTROL).toContain("private");
+    expect(pulseCacheControl(false)).toBe(BEAT_CACHE_CONTROL);
+    expect(pulseCacheControl(true)).toBe(PULSE_CACHE_CONTROL);
+    expect(BEAT_CACHE_CONTROL).toContain("public");
+    expect(BEAT_CACHE_CONTROL).not.toContain("no-store");
   });
 });

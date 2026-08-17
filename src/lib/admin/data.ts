@@ -1,21 +1,28 @@
 import "server-only";
 
 import { listVisitorFeedback } from "@/lib/data/feedback";
-import { eventSlug, getEventSnapshot } from "@/lib/data/event";
+import { listClaimAttempts } from "@/lib/ownership/claim";
+import { listReactionSignals, type ReactionSignal } from "@/lib/reactions/integrity";
+import { eventSlug, getEventOps, getEventSnapshot } from "@/lib/data/event";
 import { listSealedEditions } from "@/lib/data/editions";
 import { getSimulatedMessage, listSimulatedMessages } from "@/lib/data/simulation";
 import { getNetwork, hasSupabaseConfig, isSimulation } from "@/lib/env";
 import { editionNumberOf, parsePublicNumber } from "@/lib/utils";
 import { createServiceSupabase } from "@/lib/supabase/admin";
 import { buildAdminHealth, truncateWallet } from "@/lib/admin/sanitize";
+import { loadAdminOps } from "@/lib/admin/ops";
+import { listAdminOpsAudit } from "@/lib/ops/audit";
+import { defaultEventOps, type EventOpsControls } from "@/lib/ops/controls";
 import type {
   AdminAuditRow,
   AdminConfigPreview,
   AdminMessageHit,
   AdminOverview,
   AdminPaymentHit,
+  AdminReactionSignal,
   AdminReportRow,
 } from "@/lib/admin/types";
+import { publicIpLeak } from "@/lib/abuse/redact";
 
 function toMessageHit(row: {
   id: string;
@@ -41,6 +48,7 @@ function toMessageHit(row: {
 
 export function configPreviewFromEvent(
   event: Awaited<ReturnType<typeof getEventSnapshot>>,
+  ops: EventOpsControls = defaultEventOps(),
 ): AdminConfigPreview {
   return {
     title: event.title,
@@ -56,6 +64,10 @@ export function configPreviewFromEvent(
     totalMessages: event.totalMessages,
     totalReactions: event.totalReactions,
     editionNumber: editionNumberOf(event),
+    themeSlug: event.themeSlug ?? null,
+    themeQuestion: event.themeQuestion ?? null,
+    themeDescription: event.themeDescription ?? null,
+    monumentNumber: event.monumentNumber ?? null,
     archiveHash: event.archiveHash ?? null,
     merkleRoot: event.merkleRoot ?? null,
     archiveUri: event.archiveUri ?? null,
@@ -65,7 +77,38 @@ export function configPreviewFromEvent(
       Math.round((Date.parse(event.endsAt) - Date.parse(event.startsAt)) / 60_000),
     ),
     remainingMinutes: Math.max(0, Math.round((Date.parse(event.endsAt) - Date.now()) / 60_000)),
+    publishEnabled: ops.publishEnabled,
+    reactEnabled: ops.reactEnabled,
+    strictBot: ops.strictBot,
   };
+}
+
+async function loadReviewRanks(eventId: string): Promise<AdminMessageHit[]> {
+  if (isSimulation() || !hasSupabaseConfig()) {
+    return listSimulatedMessages({ eventId, sort: "hot", limit: 25 }).messages.map((message) => ({
+      id: message.id,
+      publicNumber: message.publicNumber,
+      text: message.text,
+      reactionCount: message.reactionCount,
+      publishedAt: message.publishedAt,
+      removedAt: message.isRemoved ? message.publishedAt : null,
+      moderationStatus: message.isRemoved ? "removed" : "approved",
+      removalReasonCode: message.isRemoved ? "other" : null,
+    }));
+  }
+
+  const db = createServiceSupabase();
+  const { data } = await db
+    .from("messages")
+    .select(
+      "id, public_number, text, reaction_count, published_at, removed_at, moderation_status, removal_reason_code",
+    )
+    .eq("event_id", eventId)
+    .order("reaction_count", { ascending: false })
+    .order("published_at", { ascending: true })
+    .order("public_number", { ascending: true })
+    .limit(25);
+  return (data ?? []).map(toMessageHit);
 }
 
 async function monumentContext() {
@@ -97,11 +140,74 @@ export async function loadAdminHealth(eventStatus = "unknown") {
   });
 }
 
+function toAdminSignal(row: ReactionSignal): AdminReactionSignal | null {
+  const signal: AdminReactionSignal = {
+    kind: row.kind,
+    subject: row.subject,
+    count: row.count,
+    createdAt: row.createdAt,
+    note: row.note,
+  };
+  if (publicIpLeak(signal)) return null;
+  return signal;
+}
+
+async function loadReactionSignals(): Promise<AdminReactionSignal[]> {
+  const memory = listReactionSignals().map(toAdminSignal).filter((row): row is AdminReactionSignal => row !== null);
+  if (isSimulation() || !hasSupabaseConfig()) return memory;
+  try {
+    const db = createServiceSupabase();
+    const { data } = await db
+      .from("reaction_signals")
+      .select("kind, subject, count, note, created_at")
+      .order("created_at", { ascending: false })
+      .limit(25);
+    const fromDb = (data ?? [])
+      .map((row) =>
+        toAdminSignal({
+          kind: row.kind as ReactionSignal["kind"],
+          subject: row.subject as string,
+          count: row.count as number,
+          createdAt: row.created_at as string,
+          note: row.note as string,
+        }),
+      )
+      .filter((row): row is AdminReactionSignal => row !== null);
+    const seen = new Set(memory.map((row) => `${row.kind}:${row.subject}:${row.createdAt}`));
+    return [...memory, ...fromDb.filter((row) => !seen.has(`${row.kind}:${row.subject}:${row.createdAt}`))].slice(
+      0,
+      25,
+    );
+  } catch {
+    return memory;
+  }
+}
+
+async function loadClaimAttempts(): Promise<AdminOverview["claimAttempts"]> {
+  try {
+    const db = createServiceSupabase();
+    const { data } = await db
+      .from("claim_attempts")
+      .select("public_number, outcome, created_at")
+      .order("created_at", { ascending: false })
+      .limit(25);
+    return (data ?? []).map((row) => ({
+      publicNumber: row.public_number as number,
+      outcome: row.outcome as string,
+      createdAt: row.created_at as string,
+    }));
+  } catch {
+    return listClaimAttempts();
+  }
+}
+
 export async function loadAdminOverview(): Promise<AdminOverview> {
   const event = await getEventSnapshot(eventSlug());
+  const opsFlags = await getEventOps();
   if (isSimulation() || !hasSupabaseConfig()) {
+    const reactionSignals = await loadReactionSignals();
     return {
-      config: configPreviewFromEvent(event),
+      config: configPreviewFromEvent(event, opsFlags),
       totals: {
         messages: event.totalMessages,
         reactions: event.totalReactions,
@@ -110,9 +216,14 @@ export async function loadAdminOverview(): Promise<AdminOverview> {
       recentFailures: [],
       openReports: [],
       flaggedMessages: [],
+      reviewRanks: await loadReviewRanks(event.id),
       audit: [],
       health: await loadAdminHealth(event.phase),
       feedback: await listVisitorFeedback(),
+      claimAttempts: listClaimAttempts(),
+      reactionSignals,
+      ops: await loadAdminOps(event, { suspiciousSpikes: reactionSignals.length }),
+      opsAudit: await listAdminOpsAudit(),
       ...(await monumentContext()),
     };
   }
@@ -190,8 +301,9 @@ export async function loadAdminOverview(): Promise<AdminOverview> {
 
   const paymentTotal = payments.count ?? 0;
 
+  const reactionSignals = await loadReactionSignals();
   return {
-    config: configPreviewFromEvent(event),
+    config: configPreviewFromEvent(event, opsFlags),
     totals: {
       messages: event.totalMessages,
       reactions: event.totalReactions,
@@ -208,9 +320,14 @@ export async function loadAdminOverview(): Promise<AdminOverview> {
       publicNumber: row.public_number,
       moderationStatus: row.moderation_status,
     })),
+    reviewRanks: await loadReviewRanks(event.id),
     audit: auditLog,
     health: await loadAdminHealth(event.phase),
     feedback: await listVisitorFeedback().catch(() => []),
+    claimAttempts: await loadClaimAttempts(),
+    reactionSignals,
+    ops: await loadAdminOps(event, { suspiciousSpikes: reactionSignals.length }),
+    opsAudit: await listAdminOpsAudit(),
     ...(await monumentContext()),
   };
 }

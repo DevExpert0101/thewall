@@ -1,11 +1,11 @@
 import { PAYMENT_INTENT_TTL_SECONDS, PRICE_USDC } from "@/lib/constants";
 import { createWallKey, hashWallKey } from "@/lib/crypto";
 import { protectAnonymousWrite } from "@/lib/abuse/protect";
-import { eventSlug, getEventSnapshot } from "@/lib/data/event";
-import { createSimulatedIntent, isSimulationEvent } from "@/lib/data/simulation";
+import { eventSlug, getEventOps, getEventSnapshot } from "@/lib/data/event";
+import { assertNotSimulatedInProduction, createSimulatedIntent, isSimulationEvent } from "@/lib/data/simulation";
 import { getNetwork, getTreasuryAddress, isSimulation } from "@/lib/env";
 import { AppError, ERROR_CODES } from "@/lib/errors";
-import { assertEventLive } from "@/lib/event/state";
+import { assertPublishOpen } from "@/lib/event/state";
 import { jsonError, jsonOk, readJson } from "@/lib/http";
 import { bindMessageHash } from "@/lib/payment/fulfillment";
 import { preflightMessage } from "@/lib/publish/preflight";
@@ -21,10 +21,12 @@ export async function POST(request: Request) {
       turnstileToken: body.turnstileToken,
     });
 
-    const { text, moderationStatus } = await preflightMessage(body.message);
+    const { text, moderationStatus, decision } = await preflightMessage(body.message);
 
     const event = await getEventSnapshot(eventSlug());
-    assertEventLive(event.phase);
+    const ops = await getEventOps();
+    assertNotSimulatedInProduction(event.id);
+    assertPublishOpen(event, ops);
 
     const wallKey = createWallKey();
     const claimSecretHash = hashWallKey(wallKey);
@@ -45,6 +47,7 @@ export async function POST(request: Request) {
         expiresAt: checkout.expiresAt,
         messageHash: checkout.messageHash,
         messagePreview: text,
+        decision,
         moderationStatus,
         testnet: checkout.network === "base-sepolia",
         simulated: true,
@@ -92,6 +95,7 @@ export async function POST(request: Request) {
       expiresAt: data.expires_at,
       messageHash,
       messagePreview: text,
+      decision,
       moderationStatus,
       testnet: network === "base-sepolia",
     });

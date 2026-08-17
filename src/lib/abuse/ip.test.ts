@@ -51,6 +51,14 @@ describe("client IP handling", () => {
     );
   });
 
+  it("redacts Wall Keys and legacy ownership tokens from logs", () => {
+    expect(redactSensitiveText("claim 7K9P-X4MF-82QH-K3R2 failed")).toBe(
+      "claim [redacted] failed",
+    );
+    expect(redactSensitiveText(`token ${"a".repeat(64)} leaked`)).toBe("token [redacted] leaked");
+    expect(redactSensitiveText("claim 7K9P-X4MF-82QH-K3R2 failed")).not.toContain("7K9P");
+  });
+
   it("does not put raw IPs in JSON error payloads", async () => {
     const error = new AppError(
       ERROR_CODES.TURNSTILE,

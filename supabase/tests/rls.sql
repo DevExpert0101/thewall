@@ -31,11 +31,32 @@ select * from public.message_claims;
 -- EXPECT FAIL: prize payout addresses
 select * from public.prize_nominations;
 
+-- EXPECT FAIL: claim challenges
+select * from public.claim_challenges;
+
+-- EXPECT FAIL: claim sessions
+select * from public.claim_sessions;
+
+-- EXPECT FAIL: claim attempts
+select * from public.claim_attempts;
+
+-- EXPECT FAIL: reaction signals
+select * from public.reaction_signals;
+
+-- EXPECT FAIL: reactions table
+select * from public.reactions;
+
+-- EXPECT FAIL: cannot execute fire RPC as anon
+select public.add_fire_reaction(gen_random_uuid(), gen_random_uuid());
+
 -- EXPECT FAIL: reports
 select * from public.reports;
 
 -- EXPECT FAIL: moderation actions
 select * from public.moderation_actions;
+
+-- EXPECT FAIL: operations audit
+select * from public.admin_ops_actions;
 
 -- EXPECT FAIL: admin users
 select * from public.admin_users;

@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import Link from "next/link";
-import { editionMessagePath, editionNumberOf, formatPublicNumber } from "@/lib/utils";
+import { editionMessagePath, editionNumberOf, formatObjectIdentity } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { FireButton } from "@/components/fire-button";
 import { SharePanel } from "@/components/share-panel";
@@ -29,8 +29,9 @@ export const MessageCard = memo(function MessageCard({
   event?: Pick<EventSnapshot, "phase" | "endsAt" | "serverNow" | "editionNumber">;
   onReacted?: (id: string, count: number) => void;
 }) {
+  const sealed = phase !== "live";
   const href =
-    event && (event.phase === "archived" || event.phase === "finalizing")
+    event && event.phase === "archived"
       ? editionMessagePath(editionNumberOf(event), message.publicNumber)
       : `/message/${message.publicNumber}`;
   const payload = sharePayloadForMessage({
@@ -43,16 +44,16 @@ export const MessageCard = memo(function MessageCard({
       className={cn(
         "inscribe p-4 sm:p-5",
         dense && "wall-card p-3.5 sm:p-4",
-        fresh && "wall-card-fresh animate-message-in",
+        fresh && !sealed && "wall-card-fresh animate-message-in",
         featured && "wall-card-featured",
       )}
     >
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <Link href={href} className="message-number">
-          {formatPublicNumber(message.publicNumber)}
+          {formatObjectIdentity(message.publicNumber, editionNumberOf(event))}
         </Link>
         {rankLabel ? (
-          <span className="kicker text-ember">{rankLabel}</span>
+          <span className={cn("kicker", sealed ? "text-bronze" : "text-ember")}>{rankLabel}</span>
         ) : null}
       </div>
       <p
@@ -68,6 +69,7 @@ export const MessageCard = memo(function MessageCard({
         <FireButton
           messageId={message.id}
           count={message.reactionCount}
+          readOnly={sealed}
           disabled={phase !== "live" || message.isRemoved}
           onReacted={onReacted}
         />

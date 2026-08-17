@@ -59,6 +59,15 @@ describe("generated images", () => {
         await assertPng(renderCreativeImage(copy, ratio));
       }
     }
+    const archived = composeCreative({
+      kind: "message",
+      event: { ...event, phase: "archived" },
+      message,
+    });
+    expect(archived.clock).toBe("SEALED — WALL №001");
+    await assertPng(renderCreativeImage(archived, "1200x630"));
+    await assertPng(renderCreativeImage(archived, "1:1"));
+    await assertPng(renderCreativeImage(archived, "9:16"));
   });
 
   it("serves live creatives from the API without fabricated counts", async () => {
@@ -85,6 +94,21 @@ describe("generated images", () => {
       new Request("http://localhost:3000/api/creatives?kind=message&ratio=1200x630"),
     );
     expect(missing.status).toBe(400);
+  });
+
+  it("serves a reached mark card and refuses an unreached one", async () => {
+    const first = await creatives(
+      new Request("http://localhost:3000/api/creatives?kind=milestone&mark=1&ratio=1200x630"),
+    );
+    await assertPng(first);
+    const unreached = await creatives(
+      new Request("http://localhost:3000/api/creatives?kind=milestone&mark=10000&ratio=1200x630"),
+    );
+    expect(unreached.status).toBe(404);
+    const unknown = await creatives(
+      new Request("http://localhost:3000/api/creatives?kind=milestone&mark=7&ratio=1200x630"),
+    );
+    expect(unknown.status).toBe(400);
   });
 });
 

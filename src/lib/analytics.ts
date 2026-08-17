@@ -1,4 +1,5 @@
 import { looksLikeIp } from "@/lib/abuse/redact";
+import { looksLikeOwnershipSecret } from "@/lib/ownership/wall-key";
 
 export const ANALYTIC_EVENTS = [
   "page_view",
@@ -24,6 +25,9 @@ const FORBIDDEN_KEYS = [
   "hash",
   "secret",
   "key",
+  "wallkey",
+  "claimkey",
+  "ownership",
 ];
 
 export function sanitizeAnalyticsMetadata(
@@ -34,7 +38,7 @@ export function sanitizeAnalyticsMetadata(
   for (const [key, value] of Object.entries(metadata)) {
     const lower = key.toLowerCase();
     if (FORBIDDEN_KEYS.some((k) => lower.includes(k))) continue;
-    if (typeof value === "string" && looksLikeIp(value)) continue;
+    if (typeof value === "string" && (looksLikeIp(value) || looksLikeOwnershipSecret(value))) continue;
     if (
       typeof value === "string" ||
       typeof value === "number" ||

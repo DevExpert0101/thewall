@@ -3,29 +3,38 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { ArchiveBrowser } from "@/components/archive-browser";
+import { SharePanel } from "@/components/share-panel";
+import { sharePayloadForWinner } from "@/lib/share/copy";
+import { formatArchiveFingerprint } from "@/lib/archive/verify";
 import { loadCanonicalArchive, loadEditionRecords, loadSealedEdition } from "@/lib/data/editions";
+import { loadMonumentForEdition } from "@/lib/monument/store";
+import { formatMonumentNumber } from "@/lib/monument/format";
 import { listMessages } from "@/lib/data/messages";
 import { isSimulation } from "@/lib/env";
 import { publicPageMetadata } from "@/lib/share/metadata";
+import type { EditionHighlight } from "@/lib/types";
 import {
   editionNumberOf,
   editionPath,
+  editionVerifyPath,
   formatCount,
   formatEditionDate,
-  formatEditionNumber,
-  formatPublicNumber,
+  formatMessageMark,
+  formatObjectIdentity,
+  formatWallEdition,
+  monumentPath,
   parseEdition,
   wallTitle,
 } from "@/lib/utils";
 import { WALL_PAGE_SIZE } from "@/lib/wall/constants";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 3600;
 
 type Props = { params: Promise<{ edition: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const editionNumber = parseEdition((await params).edition);
-  if (!editionNumber) return { title: "Edition", robots: { index: false } };
+  if (!editionNumber) return { title: "The Wall", robots: { index: false } };
   try {
     const event = await loadSealedEdition(editionNumber);
     return publicPageMetadata({
@@ -34,7 +43,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       kind: "milestone",
     });
   } catch {
-    return { title: "Edition not found", robots: { index: false } };
+    return { title: "Wall not found", robots: { index: false } };
   }
 }
 
@@ -52,84 +61,149 @@ export default async function EditionPage({ params }: Props) {
 
   const records = await loadEditionRecords(event);
   const proof = await loadCanonicalArchive(event).catch(() => null);
-  const listed = await listMessages({ eventId: event.id, sort: "hot", limit: WALL_PAGE_SIZE });
-  const winning = records.winning;
+  const listed = await listMessages({
+    eventId: event.id,
+    sort: "hot",
+    limit: WALL_PAGE_SIZE,
+    endsAt: event.endsAt,
+  });
   const n = editionNumberOf(event);
+  const wall = editionPath(n);
+  const monument = await loadMonumentForEdition(n).catch(() => null);
+  const archiveUri = event.archiveUri?.trim() || null;
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+    <main className="archive-edition mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
       <p className="kicker">
         <Link href="/archive" className="hover:text-paper">
           Archive
         </Link>
         {isSimulation() ? " · Simulation" : ""}
       </p>
-      <p className="mt-5 font-mono text-sm tracking-[0.22em] text-bronze">
-        {formatEditionNumber(n)}
+      <p className="edition-mark mt-6">
+        {formatWallEdition(n)}
       </p>
       <h1 className="permanence-title mt-3">{wallTitle(event)}</h1>
-      <p className="mt-3 font-mono text-xs tracking-[0.14em] text-mist">
+      <p className="mt-4 font-mono text-xs tracking-[0.14em] text-mist">
         {formatEditionDate(event.startsAt)}
       </p>
+      <p className="mt-3 kicker text-bronze">Sealed</p>
       <span className="title-rule mt-6 block" aria-hidden="true" />
       <p className="mt-6 font-mono text-xs tracking-[0.14em] text-bronze">
-        {formatCount(event.totalMessages)} messages · {formatCount(event.totalReactions)} 🔥 ·{" "}
+        {formatCount(event.totalMessages)} voices · {formatCount(event.totalReactions)} 🔥 ·{" "}
         {records.durationHours} hours
       </p>
       <p className="lede mt-6 max-w-xl">
-        This Wall is sealed. No new messages, reactions, or rank changes. The public
-        record is the final moderated dataset.
+        This Wall is sealed. Publishing, 🔥, and rank movement have stopped. What
+        you read here is the final public record.
       </p>
 
-      {winning ? (
-        <section className="pay-plaque shrine-plaque mt-14 max-w-2xl p-7 sm:p-10">
-          <p className="kicker text-bronze">Winning message</p>
-          <p className="mt-4 font-mono text-sm tracking-[0.22em] text-bronze">
-            {formatPublicNumber(winning.publicNumber)}
-          </p>
-          <p className={`mt-5 font-display text-3xl leading-snug sm:text-4xl ${winning.isRemoved ? "text-ash italic" : "text-paper"}`}>
-            {winning.isRemoved ? winning.text : `“${winning.text}”`}
-          </p>
-          <p className="mt-8 font-mono text-xs tracking-[0.14em] text-mist">
-            {formatCount(winning.reactionCount)} 🔥 · Final rank #1
-          </p>
-        </section>
+      {event.themeQuestion ? <p className="lede mt-6 max-w-xl">{event.themeQuestion}</p> : null}
+
+      {records.winning ? (
+        <Exhibit
+          kicker="The Victor"
+          row={records.winning}
+          edition={n}
+          href={`${wall}/${records.winning.publicNumber}`}
+          foot={`${formatCount(records.winning.reactionCount)} 🔥 · Final rank #1${monument ? ` · Now preserved as ${formatMonumentNumber(monument.monumentNumber)}` : ""}`}
+          featured
+          share={
+            records.winning.isRemoved
+              ? undefined
+              : sharePayloadForWinner({
+                  editionNumber: n,
+                  publicNumber: records.winning.publicNumber,
+                  text: records.winning.text,
+                  reactionCount: records.winning.reactionCount,
+                })
+          }
+        />
       ) : null}
 
-      <dl className="mt-12 grid gap-8 text-sm sm:grid-cols-3">
+      <div className="mt-10 grid gap-6 lg:grid-cols-2">
+        {records.first ? (
+          <Exhibit
+            kicker="First Message"
+            row={records.first}
+            edition={n}
+            href={`${wall}/${records.first.publicNumber}`}
+          />
+        ) : null}
+        {records.last ? (
+          <Exhibit
+            kicker="Final Message"
+            row={records.last}
+            edition={n}
+            href={`${wall}/${records.last.publicNumber}`}
+          />
+        ) : null}
+      </div>
+
+      <dl className="mt-14 grid gap-8 text-sm sm:grid-cols-3">
+        <Meta label="Voices" value={formatCount(event.totalMessages)} />
+        <Meta label="Fire" value={`${formatCount(event.totalReactions)} 🔥`} />
         <Meta
-          label="First message"
-          value={records.first ? formatPublicNumber(records.first.publicNumber) : "—"}
-          href={records.first ? `${editionPath(n)}/${records.first.publicNumber}` : undefined}
+          label="Finalized"
+          value={event.finalizedAt ? formatEditionDate(event.finalizedAt) : "Sealed"}
         />
-        <Meta
-          label="Last message"
-          value={records.last ? formatPublicNumber(records.last.publicNumber) : "—"}
-          href={records.last ? `${editionPath(n)}/${records.last.publicNumber}` : undefined}
-        />
-        <Meta
-          label="Most reacted"
-          value={records.mostReacted ? formatPublicNumber(records.mostReacted.publicNumber) : "—"}
-          href={records.mostReacted ? `${editionPath(n)}/${records.mostReacted.publicNumber}` : undefined}
-        />
-        <Meta label="Total messages" value={formatCount(event.totalMessages)} />
-        <Meta label="Total reactions" value={`${formatCount(event.totalReactions)} 🔥`} />
-        <Meta label="Finalized" value={event.finalizedAt ? formatEditionDate(event.finalizedAt) : "Pending"} />
       </dl>
 
-      <section className="mt-14 border-t border-line pt-10">
-        <p className="kicker">Canonical proof</p>
+      <div className="mt-10 flex flex-wrap gap-3">
+        <Link href={`${wall}/records`} className="btn btn-line">
+          Record Book
+        </Link>
+        <Link href={`${wall}/random`} className="btn btn-line">
+          Random
+        </Link>
+        <Link href={editionVerifyPath(n)} className="btn btn-line">
+          Verify this Wall
+        </Link>
+        {monument ? (
+          <Link href={monumentPath(monument.monumentNumber)} className="btn btn-primary">
+            View Monument entry
+          </Link>
+        ) : null}
+        {records.winning ? (
+          <Link href="/claim" className="btn btn-line">
+            Winner claim
+          </Link>
+        ) : null}
+      </div>
+
+      <section className="mt-16 border-t border-line pt-12">
+        <p className="kicker">Verification</p>
+        <p className="lede mt-4 max-w-xl">
+          The live site is a working copy. The sealed file and its fingerprint
+          are the public record of this day.
+        </p>
         <dl className="mt-6 grid gap-6 text-sm sm:grid-cols-2">
-          <Meta label="Archive hash" value={proof?.archiveHash ?? event.archiveHash ?? "Pending local seal"} mono />
-          <Meta label="Merkle root" value={proof?.merkleRoot ?? event.merkleRoot ?? "Pending local seal"} mono />
-          <Meta label="Permanent copy" value={event.archiveUri ?? "Downloadable JSON — off-site replica not published yet"} mono />
-          <Meta label="On-chain proof" value={event.proofTx ?? "Not recorded on Base yet"} mono />
+          <Meta
+            label="Archive fingerprint"
+            value={
+              (proof?.archiveHash ?? event.archiveHash)
+                ? formatArchiveFingerprint(proof?.archiveHash ?? event.archiveHash ?? "")
+                : "Pending local seal"
+            }
+            mono
+          />
+          <Meta
+            label="Merkle root"
+            value={
+              (proof?.merkleRoot ?? event.merkleRoot)
+                ? formatArchiveFingerprint(proof?.merkleRoot ?? event.merkleRoot ?? "")
+                : "Pending local seal"
+            }
+            mono
+          />
+          {archiveUri ? <Meta label="Independent copy" value={archiveUri} mono /> : null}
+          {event.proofTx ? <Meta label="Independent notice" value={event.proofTx} mono /> : null}
         </dl>
         <div className="mt-8 flex flex-wrap gap-3">
-          <Link href={`${editionPath(n)}/records`} className="btn btn-line">
-            Record book
+          <Link href={editionVerifyPath(n)} className="btn btn-line">
+            How to check
           </Link>
-          <a href={`${editionPath(n)}/download`} className="btn btn-line" download>
+          <a href={`${wall}/download`} className="btn btn-line" download>
             Download this Wall
           </a>
         </div>
@@ -137,7 +211,7 @@ export default async function EditionPage({ params }: Props) {
 
       <section className="mt-16">
         <p className="kicker">The frozen wall</p>
-        <h2 className="section-title mt-4">Browse the complete edition</h2>
+        <h2 className="section-title mt-4">Search this Wall</h2>
         {listed.messages.length === 0 ? (
           <div className="empty-monument mt-12">
             <p className="font-display text-3xl text-paper sm:text-4xl">No inscriptions remain public.</p>
@@ -153,28 +227,59 @@ export default async function EditionPage({ params }: Props) {
   );
 }
 
+function Exhibit({
+  kicker,
+  row,
+  edition,
+  href,
+  foot,
+  featured = false,
+  share,
+}: {
+  kicker: string;
+  row: EditionHighlight;
+  edition: number;
+  href: string;
+  foot?: string;
+  featured?: boolean;
+  share?: ReturnType<typeof sharePayloadForWinner>;
+}) {
+  return (
+    <section className={`archive-exhibit mt-10 p-7 sm:p-10 ${featured ? "max-w-2xl" : ""}`}>
+      <p className="kicker text-bronze">{kicker}</p>
+      <p className="mt-4 font-mono text-sm tracking-[0.18em] text-bronze">
+        {formatObjectIdentity(row.publicNumber, edition)}
+      </p>
+      <p className={`mt-5 font-display leading-snug ${featured ? "text-3xl sm:text-4xl" : "text-2xl"} ${row.isRemoved ? "text-ash italic" : "text-paper"}`}>
+        {row.isRemoved ? row.text : `“${row.text}”`}
+      </p>
+      {foot ? <p className="mt-8 font-mono text-xs tracking-[0.14em] text-mist">{foot}</p> : null}
+      <Link href={href} className="btn-ghost mt-6 inline-flex kicker hover:text-paper">
+        {formatMessageMark(row.publicNumber)} →
+      </Link>
+      {share ? (
+        <div className="mt-8 border-t border-line pt-6">
+          <SharePanel payload={share} via="detail" primaryLabel="Share this sentence" preview />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function Meta({
   label,
   value,
-  href,
   mono = false,
 }: {
   label: string;
   value: string;
-  href?: string;
   mono?: boolean;
 }) {
   return (
     <div>
       <dt className="kicker">{label}</dt>
       <dd className={`mt-2 text-paper ${mono ? "break-all font-mono text-xs tracking-wide text-mist" : ""}`}>
-        {href ? (
-          <Link href={href} className="hover:text-gold">
-            {value}
-          </Link>
-        ) : (
-          value
-        )}
+        {value}
       </dd>
     </div>
   );

@@ -1,3 +1,5 @@
+import { redactOwnershipSecrets } from "@/lib/ownership/wall-key";
+
 const IPV4 =
   /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 const IPV4_IN_TEXT =
@@ -13,13 +15,17 @@ export function looksLikeIp(value: string): boolean {
   return false;
 }
 
-export function redactSensitiveText(value: string): string {
+function redactIps(value: string): string {
   return value.replace(IPV4_IN_TEXT, "[redacted]").replace(IPV6_IN_TEXT, "[redacted]");
+}
+
+export function redactSensitiveText(value: string): string {
+  return redactOwnershipSecrets(redactIps(value));
 }
 
 export function publicIpLeak(value: unknown): boolean {
   if (typeof value === "string") {
-    return looksLikeIp(value) || redactSensitiveText(value) !== value;
+    return looksLikeIp(value) || redactIps(value) !== value;
   }
   if (value && typeof value === "object") {
     return Object.entries(value as Record<string, unknown>).some(([key, entry]) => {

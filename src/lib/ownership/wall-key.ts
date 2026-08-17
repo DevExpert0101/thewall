@@ -29,3 +29,20 @@ export function isLegacyOwnershipToken(value: string): boolean {
 export function isOwnershipSecret(value: string): boolean {
   return isWallKey(value) || isLegacyOwnershipToken(value);
 }
+
+const KEY_CHAR = "[A-HJ-KM-NP-Z2-9]";
+const GROUPED_KEY = new RegExp(`\\b${KEY_CHAR}{4}(?:-${KEY_CHAR}{4}){3}\\b`, "g");
+const BARE_KEY = new RegExp(`\\b${KEY_CHAR}{16}\\b`, "g");
+const LEGACY_HEX = /\b[0-9a-f]{64}\b/gi;
+
+export function looksLikeOwnershipSecret(value: string): boolean {
+  const trimmed = value.trim();
+  return isOwnershipSecret(trimmed);
+}
+
+export function redactOwnershipSecrets(value: string): string {
+  return value
+    .replace(GROUPED_KEY, "[redacted]")
+    .replace(BARE_KEY, "[redacted]")
+    .replace(LEGACY_HEX, "[redacted]");
+}

@@ -1,9 +1,17 @@
-export const APP_NAME = "THE WALL";
-export const TAGLINE = "ONE DAY. ONE DOLLAR. ONE SENTENCE FOREVER.";
-export const ARCHIVAL_TAGLINE = "ONE DAY. ONE DOLLAR. ONE SENTENCE FOREVER.";
+import { BRAND } from "@/lib/brand";
+
+export const APP_NAME = BRAND.wordmark;
+export const TAGLINE = "ONE DAY. ONE DOLLAR. ONE SENTENCE.";
+export const ARCHIVAL_TAGLINE = "ONE DAY. ONE DOLLAR. ONE SENTENCE.";
 export const ARCHIVAL_REMOVAL_TEXT = "Message removed under archive policy.";
-export const SUPPORTING_COPY =
-  "For 24 hours, the world gets one anonymous wall. Anyone can read it. One dollar buys one 140-character message. When the clock reaches zero, no one can add another word.";
+export const HERO_PITCH = [
+  "For 24 hours, one wall is open.",
+  "Anyone can read it.",
+  "$1 writes one sentence.",
+  "When the clock hits zero, no one can add another word.",
+] as const;
+
+export const SUPPORTING_COPY = HERO_PITCH.join(" ");
 
 export const MESSAGE_MAX_GRAPHEMES = 140;
 export const MESSAGE_DB_MAX_CHARS = 560;
@@ -30,8 +38,18 @@ export const DEFAULT_RPC_URLS = {
 
 export type BaseNetwork = keyof typeof USDC_ADDRESSES;
 
-export const SORTS = ["trending", "hot", "new", "random", "hour"] as const;
-export type MessageSort = (typeof SORTS)[number];
+export const CANONICAL_SORTS = ["rising", "hot", "new", "random", "gems", "final"] as const;
+export type MessageSort = (typeof CANONICAL_SORTS)[number];
+export const SORTS = [...CANONICAL_SORTS, "trending", "hour"] as const;
+export type AcceptedSort = (typeof SORTS)[number];
+
+export function resolveMessageSort(sort: string | undefined): MessageSort {
+  if (sort === "trending" || sort === "hour" || sort === "rising") return "rising";
+  if (sort === "hot" || sort === "new" || sort === "random" || sort === "gems" || sort === "final") {
+    return sort;
+  }
+  return "rising";
+}
 
 export const REPORT_CATEGORIES = [
   "hate",

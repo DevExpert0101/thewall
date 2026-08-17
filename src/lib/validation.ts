@@ -4,6 +4,7 @@ import {
   MESSAGE_MAX_GRAPHEMES,
   MODERATION_REASON_CODES,
   REPORT_CATEGORIES,
+  resolveMessageSort,
   SORTS,
 } from "@/lib/constants";
 import { isOwnershipSecret } from "@/lib/ownership/wall-key";
@@ -15,6 +16,7 @@ export const composeSchema = z.object({
 
 export const preflightSchema = z.object({
   message: z.string().min(1).max(MESSAGE_MAX_GRAPHEMES * 8),
+  turnstileToken: z.string().min(10).optional(),
 });
 
 export const verifyPaymentSchema = z.object({
@@ -27,6 +29,8 @@ export const verifyPaymentSchema = z.object({
 
 export const reactSchema = z.object({
   messageId: z.string().uuid(),
+  idempotencyKey: z.string().uuid().optional(),
+  turnstileToken: z.string().min(10).optional(),
 });
 
 export const reportSchema = z.object({
@@ -48,11 +52,18 @@ export const feedbackSchema = z.object({
 });
 
 export const messagesQuerySchema = z.object({
-  sort: z.enum(SORTS).default("trending"),
+  sort: z.enum(SORTS).default("rising").transform(resolveMessageSort),
   cursor: z.string().max(80).optional(),
-  limit: z.coerce.number().int().min(1).max(50).default(24),
+  limit: z.coerce.number().int().min(1).max(50).default(12),
   q: z.string().max(140).optional(),
   salt: z.string().max(64).optional(),
+  edition: z.coerce.number().int().min(1).max(999999).optional(),
+  mix: z.enum(["1", "0"]).optional(),
+});
+
+export const randomMessagesQuerySchema = z.object({
+  exclude: z.string().max(400).optional(),
+  count: z.coerce.number().int().min(1).max(8).default(2),
   edition: z.coerce.number().int().min(1).max(999999).optional(),
 });
 
@@ -79,12 +90,20 @@ export const certificateQuerySchema = z.object({
 export const claimSchema = z.object({
   publicNumber: z.coerce.number().int().min(1).max(1_000_000),
   wallKey: z.string().min(8).max(80),
-  payoutMethod: z.enum(["usdc"]).optional(),
-  payoutAddress: z
-    .string()
-    .regex(/^0x[0-9a-fA-F]{40}$/)
-    .optional(),
 });
+
+export const winnerDeliverySchema = z
+  .object({
+    contactEmail: z.string().email().max(200).optional(),
+    payoutAddress: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{40}$/)
+      .optional(),
+    legalAcknowledged: z.literal(true),
+  })
+  .refine((value) => Boolean(value.contactEmail || value.payoutAddress), {
+    message: "Enter a contact email or a payout wallet.",
+  });
 
 export const analyticsSchema = z.object({
   name: z.enum([
@@ -118,13 +137,21 @@ export const adminReportReviewSchema = z.object({
 });
 
 export const adminEventSchema = z.object({
-  action: z.enum(["save", "start", "finish", "openNext", "reset"]).optional().default("save"),
+  action: z.enum(["save", "start", "finish", "openNext", "reset", "ops"]).optional().default("save"),
   title: z.string().min(1).max(80).optional(),
+  themeSlug: z.string().max(80).optional(),
+  themeQuestion: z.string().max(280).optional(),
+  themeDescription: z.string().max(800).optional(),
   startsAt: z.string().datetime({ offset: true }).optional(),
   endsAt: z.string().datetime({ offset: true }).optional(),
   remainingMinutes: z.number().int().min(1).max(14 * 24 * 60).optional(),
   durationMinutes: z.number().int().min(1).max(14 * 24 * 60).optional(),
+  publishEnabled: z.boolean().optional(),
+  reactEnabled: z.boolean().optional(),
+  strictBot: z.boolean().optional(),
   confirmHistoricalEdit: z.boolean().optional(),
+  confirm: z.boolean().optional(),
+  confirmText: z.string().max(32).optional(),
 });
 
 export const adminSearchSchema = z.object({

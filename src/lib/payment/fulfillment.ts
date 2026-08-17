@@ -32,14 +32,18 @@ export function assertMessageBound(text: string, hash: string): void {
   }
 }
 
+export function assertIntentOwned(intent: StoredIntent, actorId: string): void {
+  if (intent.anonymous_user_id !== actorId) {
+    throw new AppError(ERROR_CODES.FORBIDDEN, "This payment does not belong to you.", 403);
+  }
+}
+
 export function assertIntentFulfillable(
   intent: StoredIntent,
   actorId: string,
   now: Date = new Date(),
 ): void {
-  if (intent.anonymous_user_id !== actorId) {
-    throw new AppError(ERROR_CODES.FORBIDDEN, "This payment does not belong to you.", 403);
-  }
+  assertIntentOwned(intent, actorId);
   if (intent.status === "fulfilled") {
     throw new AppError(ERROR_CODES.INTENT_FULFILLED, "Payment already used.");
   }

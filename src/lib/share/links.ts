@@ -31,8 +31,8 @@ export function redditShareUrl(url: string, title: string): string {
   return submit.toString();
 }
 
-const SHARE_PATH = /^\/(?:wall|archive|about|records)?$/;
-const MESSAGE_PATH = /^\/message\/(\d{1,8})$/;
+const SHARE_PATH = /^\/(?:wall|watch|open|archive|about|how-it-works|records)?$/;
+const MESSAGE_PATH = /^\/message\/(\d{1,8})(?:\/certificate)?$/;
 const EDITION_PATH = /^\/archive\/\d{1,6}(?:\/(?:records|\d{1,8}))?$/;
 
 export function parseShareableUrl(raw: string, origin = siteUrl()): URL | null {
@@ -65,11 +65,23 @@ export function creativeImageUrl(input: {
   kind: "countdown" | "milestone" | "message" | "certificate";
   ratio?: string;
   number?: number;
+  mark?: number;
+  fire?: number;
   origin?: string;
 }): string {
   const href = new URL("/api/creatives", input.origin ?? siteUrl());
   href.searchParams.set("kind", input.kind);
   href.searchParams.set("ratio", input.ratio ?? "1200x630");
   if (input.number) href.searchParams.set("number", String(input.number));
+  if (input.mark) href.searchParams.set("mark", String(input.mark));
+  if (input.fire) href.searchParams.set("fire", String(input.fire));
   return href.toString();
+}
+
+export function messageNumberFromSharePath(path: string): number | null {
+  const message = path.match(/\/message\/(\d{1,8})(?:\/|$)/);
+  if (message) return Number(message[1]);
+  const edition = path.match(/\/archive\/\d{1,6}\/(\d{1,8})(?:\/|$)/);
+  if (edition) return Number(edition[1]);
+  return null;
 }

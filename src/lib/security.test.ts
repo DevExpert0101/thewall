@@ -32,6 +32,16 @@ describe("analytics hygiene", () => {
     expect(clean).toEqual({ via: "card" });
     expect(JSON.stringify(clean)).not.toContain("203.0.113");
   });
+
+  it("drops Wall Keys even when the field name is innocuous", () => {
+    const clean = sanitizeAnalyticsMetadata({
+      via: "publish",
+      note: "7K9P-X4MF-82QH-K3R2",
+      publicNumber: 4291,
+    });
+    expect(clean).toEqual({ via: "publish", publicNumber: 4291 });
+    expect(JSON.stringify(clean)).not.toContain("7K9P");
+  });
 });
 
 describe("public numbers", () => {

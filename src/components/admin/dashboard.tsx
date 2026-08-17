@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AdminConfirmDialog } from "@/components/admin/confirm-dialog";
+import { AdminLaunchOps } from "@/components/admin/launch-ops";
 import { AdminWallControls } from "@/components/admin/wall-controls";
 import type { DangerousAdminAction } from "@/lib/admin/confirm";
 import type {
@@ -31,7 +32,7 @@ type Pending =
 const PHASE_LABEL: Record<string, string> = {
   upcoming: "Not yet open",
   live: "The day is open",
-  finalizing: "Sealing",
+  finalizing: "Under review",
   archived: "Sealed",
 };
 
@@ -172,7 +173,7 @@ export function AdminDashboard({
           <h1 className="permanence-title mt-4">Keep the monument legible.</h1>
           <span className="title-rule mt-5 block" aria-hidden="true" />
           <p className="lede mt-5 max-w-xl">
-            Each Wall lives for 24 hours, then becomes a numbered edition. Moderate
+            Each Wall lives for 24 hours, then is sealed as The Wall №001. Moderate
             the live day before it is sealed. After seal, a removal is a redaction —
             the number stays.
           </p>
@@ -228,6 +229,42 @@ export function AdminDashboard({
         ) : null}
       </section>
 
+      <section>
+        <h2 className="kicker">Launch</h2>
+        <p className="mt-2 text-sm text-mist">
+          Share these for the first minutes. They do not grant special publish
+          rights. They do not invent voices, 🔥, or viewers.
+        </p>
+        <p className="mt-3 font-mono text-xs tracking-[0.14em] text-bronze">
+          Opens {formatUtcTime(overview.config.startsAt)} UTC
+        </p>
+        <ul className="mt-4 space-y-2 text-sm">
+          <li>
+            <Link href="/open" className="btn-ghost kicker hover:text-paper">
+              Waiting room →
+            </Link>
+          </li>
+          <li>
+            <Link href="/invite" className="btn-ghost kicker hover:text-paper">
+              Invite →
+            </Link>
+          </li>
+          <li>
+            <Link href="/watch/stream" className="btn-ghost kicker hover:text-paper">
+              Stream mode →
+            </Link>
+          </li>
+        </ul>
+      </section>
+
+      <AdminLaunchOps
+        config={overview.config}
+        ops={overview.ops}
+        audit={overview.opsAudit}
+        onError={setError}
+        onSaved={refresh}
+      />
+
       <AdminWallControls
         key={`${overview.config.editionNumber}-${overview.config.phase}-${overview.config.startsAt}`}
         config={overview.config}
@@ -235,6 +272,57 @@ export function AdminDashboard({
         onError={setError}
         onSaved={refresh}
       />
+
+      <section>
+        <h2 className="kicker">Review rankings</h2>
+        <p className="mt-2 text-sm text-mist">
+          {overview.config.phase === "finalizing"
+            ? "Publishing has stopped. Remove illegal or immoral sentences, then press Finish this Wall to disclose the final results."
+            : "Current order by 🔥. After the clock closes, review this list before disclosing the archive."}
+        </p>
+        <ul className="mt-4 space-y-3">
+          {overview.reviewRanks.length === 0 ? (
+            <li className="text-sm text-ash">No sentences on this Wall yet.</li>
+          ) : null}
+          {overview.reviewRanks.map((row, index) => (
+            <li key={row.id} className="inscribe p-4 text-sm">
+              <p className="font-mono text-ash">
+                Rank #{index + 1} · {formatPublicNumber(row.publicNumber)} · {row.reactionCount} 🔥
+                {row.removedAt ? " · removed" : ""}
+              </p>
+              <p className="mt-2 text-paper">{row.text}</p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  className="btn btn-line"
+                  onClick={() =>
+                    setPending({
+                      kind: "remove",
+                      messageId: row.id,
+                      publicNumber: row.publicNumber,
+                    })
+                  }
+                >
+                  Remove
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-line"
+                  onClick={() =>
+                    setPending({
+                      kind: "restore",
+                      messageId: row.id,
+                      publicNumber: row.publicNumber,
+                    })
+                  }
+                >
+                  Restore
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <section>
         <h2 className="kicker">Archive library</h2>
@@ -279,7 +367,7 @@ export function AdminDashboard({
       <section>
         <h2 className="kicker">Message search</h2>
         <p className="mt-2 text-sm text-mist">
-          Search this edition by number or words. Removal keeps the number; the public
+          Search this Wall by number or words. Removal keeps the number; the public
           line becomes archive policy text.
         </p>
         <form onSubmit={(e) => void search(e)} className="mt-3 flex gap-2">
@@ -464,10 +552,43 @@ export function AdminDashboard({
       </section>
 
       <section>
+        <h2 className="kicker">Reaction integrity</h2>
+        <p className="mt-2 text-sm text-mist">
+          Suspicious 🔥 is visible here. Visitors are not silently dropped. A check
+          appears only when a pattern looks automated.
+        </p>
+        <ul className="mt-3 space-y-2 text-sm text-mist">
+          {overview.reactionSignals.length === 0 ? (
+            <li className="text-sm text-ash">No suspicious 🔥 patterns.</li>
+          ) : null}
+          {overview.reactionSignals.map((row, i) => (
+            <li key={`${row.kind}-${row.subject}-${row.createdAt}-${i}`} className="font-mono text-xs">
+              {row.kind} · {row.subject} · {row.count} · {row.note}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h2 className="kicker">Claim attempts</h2>
+        <p className="mt-2 text-sm text-mist">
+          Outcomes only. Wall Keys are never stored or shown.
+        </p>
+        <ul className="mt-3 space-y-1 font-mono text-sm text-mist">
+          {overview.claimAttempts.length === 0 ? <li>None</li> : null}
+          {overview.claimAttempts.map((row, i) => (
+            <li key={`${row.createdAt}-${i}`}>
+              #{String(row.publicNumber).padStart(6, "0")} · {row.outcome}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
         <h2 className="kicker">System health</h2>
         <p className="mt-2 text-sm text-mist">
-          Supabase is the working copy. Hashes prove the sealed dataset. Off-site
-          permanence is published after final moderation.
+          Supabase is the working copy, not permanent storage. Hashes prove the
+          sealed public file. Extra copies are published only when configured.
         </p>
         <dl className="mt-4 grid gap-2 font-mono text-sm sm:grid-cols-2">
           {Object.entries(overview.health).map(([k, v]) => (

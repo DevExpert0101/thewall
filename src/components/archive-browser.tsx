@@ -1,10 +1,15 @@
 "use client";
 
+import * as Tabs from "@radix-ui/react-tabs";
 import { useState } from "react";
+import { FailureRecovery } from "@/components/failure-recovery";
 import { MessageCard } from "@/components/message-card";
+import { RandomMode } from "@/components/random-mode";
 import { WallSkeleton } from "@/components/wall-skeleton";
+import type { MessageSort } from "@/lib/constants";
 import { editionNumberOf, parsePublicNumber } from "@/lib/utils";
 import { WALL_PAGE_SIZE } from "@/lib/wall/constants";
+import { discoveryMethodsFor, discoveryTabs } from "@/lib/wall/discovery";
 import type { EventSnapshot, PublicMessage } from "@/lib/types";
 
 type Props = {
@@ -14,6 +19,7 @@ type Props = {
 };
 
 export function ArchiveBrowser({ event, initial, initialCursor = null }: Props) {
+  const [sort, setSort] = useState<MessageSort>("hot");
   const [messages, setMessages] = useState(initial);
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [draft, setDraft] = useState("");
@@ -21,20 +27,29 @@ export function ArchiveBrowser({ event, initial, initialCursor = null }: Props) 
   const [hideRemoved, setHideRemoved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [randomOpen, setRandomOpen] = useState(false);
 
   const searching = Boolean(query.trim());
   const visible = hideRemoved ? messages.filter((message) => !message.isRemoved) : messages;
+  const tabs = discoveryTabs(false);
 
-  async function load(input: { q?: string; nextCursor?: string | null; append?: boolean }) {
+  async function load(input: {
+    nextSort?: MessageSort;
+    q?: string;
+    nextCursor?: string | null;
+    append?: boolean;
+  }) {
+    const nextSort = input.nextSort ?? sort;
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({
-        sort: "hot",
+        sort: nextSort,
         limit: String(WALL_PAGE_SIZE),
       });
       if (input.q) params.set("q", input.q);
       if (input.nextCursor) params.set("cursor", input.nextCursor);
+      if (nextSort === "random") params.set("salt", event.id);
       if (event.editionNumber || event.phase === "archived") {
         params.set("edition", String(editionNumberOf(event)));
       }
@@ -56,6 +71,17 @@ export function ArchiveBrowser({ event, initial, initialCursor = null }: Props) 
     }
   }
 
+  function changeSort(next: MessageSort) {
+    if (next === "random") {
+      setRandomOpen(true);
+      return;
+    }
+    setSort(next);
+    setQuery("");
+    setDraft("");
+    void load({ nextSort: next });
+  }
+
   function onSearch(form: React.FormEvent) {
     form.preventDefault();
     const raw = draft.trim();
@@ -74,7 +100,7 @@ export function ArchiveBrowser({ event, initial, initialCursor = null }: Props) 
     <div>
       <form className="mt-10" onSubmit={onSearch}>
         <label className="block">
-          <span className="kicker">Search by number or words</span>
+          <span className="kicker">Find a sentence</span>
           <div className="mt-2 flex flex-wrap gap-2">
             <input
               value={draft}
@@ -83,6 +109,7 @@ export function ArchiveBrowser({ event, initial, initialCursor = null }: Props) 
               inputMode="search"
               autoComplete="off"
               aria-invalid={Boolean(draft.trim().startsWith("#") && !parsePublicNumber(draft))}
+              aria-describedby="archive-search-hint"
               className="field min-w-[10rem] flex-1 font-mono text-sm"
             />
             <button type="submit" className="btn btn-line shrink-0 px-4">
@@ -103,6 +130,9 @@ export function ArchiveBrowser({ event, initial, initialCursor = null }: Props) 
             ) : null}
           </div>
         </label>
+        <p id="archive-search-hint" className="sr-only">
+          Search this Wall by message number like #004291, or by a phrase from the sentence.
+        </p>
       </form>
 
       <label className="mt-4 inline-flex min-h-11 items-center gap-2 kicker">
@@ -115,12 +145,50 @@ export function ArchiveBrowser({ event, initial, initialCursor = null }: Props) 
         Hide removed
       </label>
 
+      <Tabs.Root
+        value={sort}
+        onValueChange={(value) => changeSort(value as MessageSort)}
+        className="mt-4"
+      >
+        <Tabs.List aria-label="Archive filters" className="wall-tabs">
+          {tabs.map((tab) => (
+            <Tabs.Trigger key={tab.id} value={tab.id} title={tab.hint} className="wall-tab">
+              {tab.label}
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
+        <details className="mt-4 max-w-2xl text-sm text-ash">
+          <summary className="kicker cursor-pointer text-bronze hover:text-paper">
+            How these lists are ranked
+          </summary>
+          <p className="mt-3 text-mist">
+            These lists are frozen. They do not move. Everyone looking at this
+            Wall sees the same order. Nothing is personalized.
+          </p>
+          <ul className="mt-3 space-y-3">
+            {discoveryMethodsFor(false).map((method) => (
+              <li key={method.id}>
+                <p className="font-display text-paper">{method.title}</p>
+                <p className="mt-1">{method.body}</p>
+              </li>
+            ))}
+          </ul>
+        </details>
+      </Tabs.Root>
+
       {error ? (
-        <div className="mt-6 border border-blood/40 bg-blood/10 p-5" role="alert">
-          <p className="text-sm text-paper">{error}</p>
-          <button type="button" className="btn-ghost mt-3 text-ember" onClick={() => void load({ q: query || undefined })}>
-            Try again
-          </button>
+        <div className="mt-6">
+          <FailureRecovery
+            title="The archive is temporarily unreachable"
+            body={error}
+            actions={[
+              {
+                label: "Try again",
+                kind: "line",
+                onClick: () => void load({ q: query || undefined }),
+              },
+            ]}
+          />
         </div>
       ) : null}
 
@@ -133,8 +201,8 @@ export function ArchiveBrowser({ event, initial, initialCursor = null }: Props) 
           </p>
           <p className="lede mx-auto mt-4 max-w-md">
             {n
-              ? "That number is not in this edition."
-              : "No sentence in this edition contains those words."}
+              ? "That number is not on this Wall."
+              : "No sentence on this Wall contains those words."}
           </p>
         </div>
       ) : null}
@@ -151,6 +219,10 @@ export function ArchiveBrowser({ event, initial, initialCursor = null }: Props) 
             />
           ))}
         </div>
+      ) : null}
+
+      {randomOpen ? (
+        <RandomMode event={event} variant="overlay" onClose={() => setRandomOpen(false)} />
       ) : null}
 
       {cursor && !searching && !error ? (

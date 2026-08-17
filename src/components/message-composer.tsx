@@ -31,7 +31,11 @@ export function MessageComposer({
     const el = areaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    const next = Math.min(Math.max(el.scrollHeight, 120), 280);
+    const compact =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(max-width: 639px)").matches;
+    const next = Math.min(Math.max(el.scrollHeight, compact ? 88 : 120), compact ? 132 : 280);
     el.style.height = `${next}px`;
   }
 
@@ -55,6 +59,9 @@ export function MessageComposer({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onInput={fit}
+        onFocus={() => {
+          areaRef.current?.scrollIntoView?.({ block: "center", inline: "nearest" });
+        }}
         disabled={disabled}
         rows={3}
         enterKeyHint="enter"
@@ -65,9 +72,9 @@ export function MessageComposer({
         spellCheck
         aria-describedby={`${id}-count`}
         aria-invalid={over}
-        placeholder="What will you leave behind?"
+        placeholder="One sentence. No name."
         className={cn(
-          "mt-3 max-h-[280px] min-h-[120px] w-full resize-none overflow-y-auto border bg-void/70 px-3.5 py-3 font-display text-lg leading-snug text-paper placeholder:text-ash/55 transition-[border-color] duration-200 focus:outline-none sm:text-2xl",
+          "composer-field mt-3 max-h-[280px] min-h-[120px] w-full resize-none overflow-y-auto border bg-void/70 px-3.5 py-3 font-display text-lg leading-snug text-paper placeholder:text-ash/55 transition-[border-color] duration-200 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bronze sm:text-2xl",
           over ? "border-blood" : "border-line focus:border-bronze",
         )}
         onKeyDown={(event) => {
@@ -83,7 +90,7 @@ export function MessageComposer({
           "mt-2 font-mono text-xs tabular",
           over ? "text-blood" : remaining <= 20 ? "text-ember" : "text-ash",
         )}
-        aria-live="polite"
+        aria-live={over ? "assertive" : "off"}
       >
         {count} / {MESSAGE_MAX_GRAPHEMES}
         <span className="sr-only">

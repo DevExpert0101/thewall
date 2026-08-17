@@ -26,7 +26,7 @@ export default async function CertificatePage({
   } catch {
     return <Invalid />;
   }
-  return <CertificateView token={token} data={data} />;
+  return <CertificateView data={data} />;
 }
 
 function Invalid() {
@@ -35,7 +35,7 @@ function Invalid() {
       <p className="kicker">Certificate</p>
       <h1 className="mt-5 font-display text-4xl">Certificate not found</h1>
       <p className="lede mt-4">
-        This certificate link is invalid. Check the Wall Key you saved when you published.
+        This Certificate link is invalid. Use the Certificate on the message page, or prove ownership with your Wall Key on the claim page.
       </p>
     </main>
   );

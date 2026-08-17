@@ -56,6 +56,8 @@ export function publicPageMetadata(input: {
     },
     other: {
       "theme-color": colors.void,
+      "event:start_time": input.event.startsAt,
+      "event:end_time": input.event.endsAt,
     },
   };
 }

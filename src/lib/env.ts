@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { isVercelProduction } from "@/lib/env/production";
 import type { BaseNetwork } from "@/lib/constants";
 
 const address = z
@@ -71,6 +72,8 @@ const serverSchema = z.object({
   BASE_RPC_URL: z.preprocess(blankToUndefined, z.string().url().optional()),
   BASE_BUNDLER_URL: z.preprocess(blankToUndefined, z.string().url().optional()),
   ERROR_WEBHOOK_URL: z.preprocess(blankToUndefined, z.string().url().optional()),
+  ARCHIVE_REPLICA_WEBHOOK_URL: z.preprocess(blankToUndefined, z.string().url().optional()),
+  ARCHIVE_PROOF_WEBHOOK_URL: z.preprocess(blankToUndefined, z.string().url().optional()),
   ADMIN_EMAILS: z.preprocess(blankToUndefined, z.string().optional()),
   PAYMENT_INTENT_TTL_SECONDS: z.preprocess(
     blankToUndefined,
@@ -118,8 +121,9 @@ function flagOn(value: string | undefined): boolean | null {
   return null;
 }
 
-/** Local mock of the single Wall. Off in production unless explicitly enabled. */
+/** Local mock of the single Wall. Never on Vercel production. */
 export function isSimulation(): boolean {
+  if (isVercelProduction()) return false;
   const flagged = flagOn(
     process.env.NEXT_PUBLIC_SIMULATE_LIVE ?? process.env.SIMULATE_LIVE,
   );
@@ -154,6 +158,8 @@ export function requireServerEnv(): ServerEnv & {
     BASE_BUNDLER_URL: process.env.BASE_BUNDLER_URL,
     ADMIN_EMAILS: process.env.ADMIN_EMAILS,
     ERROR_WEBHOOK_URL: process.env.ERROR_WEBHOOK_URL,
+    ARCHIVE_REPLICA_WEBHOOK_URL: process.env.ARCHIVE_REPLICA_WEBHOOK_URL,
+    ARCHIVE_PROOF_WEBHOOK_URL: process.env.ARCHIVE_PROOF_WEBHOOK_URL,
     PAYMENT_INTENT_TTL_SECONDS: process.env.PAYMENT_INTENT_TTL_SECONDS,
   });
   if (!parsed.success) {

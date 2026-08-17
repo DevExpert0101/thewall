@@ -16,7 +16,7 @@ const payload: CertificatePayload = {
   publishedAt: "2026-08-13T10:00:00.000Z",
   eventTitle: "THE WALL",
   eventDate: "13 August 2026",
-  tagline: "ONE DAY. ONE DOLLAR. ONE SENTENCE FOREVER.",
+  tagline: "ONE DAY. ONE DOLLAR. ONE SENTENCE.",
 };
 
 describe("certificate images", () => {

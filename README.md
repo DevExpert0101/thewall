@@ -29,15 +29,21 @@ Derived from **server/database time** against `starts_at` / `ends_at` — never 
 
 Closing The Wall does **not** depend on a cron job. After `ends_at`, SQL functions and API routes reject writes. Rankings are finalized lazily on the next server request.
 
-## Ranking formulas (v1)
+## Discovery ranking
 
-Documented in `src/lib/ranking.ts`.
+Documented in `src/lib/ranking.ts`. Everyone looking at the same Wall sees the same lists. Nothing is personalized.
 
-- **New** — `published_at DESC`
-- **Most 🔥** — `reaction_count DESC, published_at ASC`
-- **Most 🔥 this hour** — reactions in the last 60 minutes
-- **Random** — per-request shuffle
-- **Trending** — `reaction_count / (hours_since_publish + 2) ^ 1.5`
+- **Rising** — `ln(1 + min(V, 40)) × (M / (M + 4)) × (1 / (1 + A / 8)) + 0.25 × ln(1 + min(U, 400)) / (1 + A)`. V = unique 🔥 in the last 60 minutes, M = distinct minutes those 🔥 arrived in, A = hours since publish, U = lifetime unique 🔥. After close, this tab locks to Most 🔥. Burst signals are not part of the score.
+- **Most 🔥** — `reaction_count DESC, published_at ASC, public_number ASC`. One tab, not the default.
+- **New** — `published_at DESC, public_number DESC`
+- **Random** — Uniform draw from public numbers `1..N` not opened in this session, fetched by number. Fullscreen Random Mode: SHOW ME ANOTHER HUMAN. No `ORDER BY random()`.
+- **Hidden gems** — at least 3 🔥, drop the top 20% by lifetime 🔥 (or only the loudest if fewer than 5 messages have any 🔥), then `reaction_count / (hours_since_publish + 2)`
+- **Final hour** — `published_at` in `[ends_at - 1h, ends_at]`, newest first. The last hour of this Wall, not a rolling clock after close.
+- **Message search** — public number, or a phrase.
+
+## Spectator
+
+`/watch` is the free deck (also `/live`). Modes: Auto Wall, Rising Now, Random Human, Top 10. `/watch/stream?mode=rising` is the OBS/browser-source view — no site chrome, countdown and message numbers only, no sound. Add `cycle=12` to rotate, `cycle=0` to hold.
 
 ## Local setup
 

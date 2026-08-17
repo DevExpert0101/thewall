@@ -130,6 +130,15 @@ export const colors = themes[DEFAULT_THEME].colors;
 export const fonts = {
   display: 'var(--font-instrument), ui-serif, Georgia, "Times New Roman", serif',
   monument: 'var(--font-cinzel), var(--font-instrument), ui-serif, Georgia, serif',
+  hand: '"Segoe Script", "Bradley Hand", cursive',
+  hands: [
+    '"Segoe Script", cursive',
+    '"Bradley Hand", cursive',
+    '"Segoe Script", cursive',
+    '"Bradley Hand", cursive',
+    '"Segoe Script", cursive',
+    '"Bradley Hand", cursive',
+  ],
   sans: "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif",
   mono: "var(--font-geist-mono), ui-monospace, monospace",
 } as const;

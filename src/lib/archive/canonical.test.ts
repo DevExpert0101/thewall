@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { ARCHIVE_SCHEMA, buildCanonicalArchive, merkleRoot } from "@/lib/archive/canonical";
+import {
+  ARCHIVE_SCHEMA,
+  FORBIDDEN_ARCHIVE_KEYS,
+  archiveBodyOf,
+  buildCanonicalArchive,
+  merkleRoot,
+  serializeCanonicalArchive,
+} from "@/lib/archive/canonical";
 import { sha256Hex } from "@/lib/crypto";
 import type { EventSnapshot, PublicMessage } from "@/lib/types";
 
@@ -15,7 +22,7 @@ const event: EventSnapshot = {
   serverNow: "2026-08-13T19:00:00.000Z",
   totalMessages: 2,
   totalReactions: 5,
-  treasuryAddress: null,
+  treasuryAddress: "0x1111111111111111111111111111111111111111",
   network: "base-sepolia",
   priceUsdc: "1.00",
   editionNumber: 1,
@@ -48,9 +55,38 @@ describe("canonical archive", () => {
     expect(first.archiveHash).toBe(second.archiveHash);
     expect(first.merkleRoot).toBe(second.merkleRoot);
     expect(first.winningPublicNumber).toBe(1);
+    expect(first.archiveHash).toBe(sha256Hex(serializeCanonicalArchive(archiveBodyOf(first))));
   });
 
   it("uses an empty-tree hash when there are no leaves", () => {
     expect(merkleRoot([])).toBe(sha256Hex(""));
+  });
+
+  it("never seals wallets, keys, IPs, user ids, or payment metadata", () => {
+    const dirty = {
+      ...message(1, { finalRank: 1 }),
+      walletAddress: "0xabcabcabcabcabcabcabcabcabcabcabcabcabca",
+      claimKey: "WALL-KEY-SECRET",
+      ownershipHash: "deadbeefdeadbeef",
+      ipAddress: "203.0.113.44",
+      userId: "user-uuid-should-not-leak",
+      moderationNote: "internal strike reason",
+      paymentTx: "0xpaypaypaypaypaypaypaypaypaypaypaypaypaypaypaypaypaypaypaypaypayp",
+    } as PublicMessage & Record<string, string>;
+    const sealed = buildCanonicalArchive({ event, messages: [dirty, message(2)] });
+    const blob = serializeCanonicalArchive(archiveBodyOf(sealed));
+    expect(blob).not.toMatch(/0xabcabc|WALL-KEY-SECRET|deadbeef|203\.0\.113\.44|user-uuid-should-not-leak|internal strike|0xpaypay/i);
+    expect(blob).not.toMatch(/0x1111111111111111111111111111111111111111/);
+    expect(Object.keys(sealed.messages[0] ?? {}).sort()).toEqual([
+      "finalRank",
+      "isRemoved",
+      "publicNumber",
+      "publishedAt",
+      "reactionCount",
+      "text",
+    ]);
+    for (const key of FORBIDDEN_ARCHIVE_KEYS) {
+      expect(blob.includes(`"${key}"`)).toBe(false);
+    }
   });
 });

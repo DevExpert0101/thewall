@@ -27,6 +27,7 @@ export async function PATCH(request: Request) {
     const body = adminReportReviewSchema.parse(await readJson(request));
     const result = await dismissReport({
       adminId: admin.id,
+      adminEmail: admin.email,
       reportId: body.reportId,
       reason: body.reason,
       note: body.note,

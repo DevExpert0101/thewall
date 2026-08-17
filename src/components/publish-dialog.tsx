@@ -1,15 +1,34 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { FailureRecovery } from "@/components/failure-recovery";
 import { MessageComposer, composerCanContinue } from "@/components/message-composer";
 import { PublishSuccess } from "@/components/publish-success";
 import { TurnstileGate } from "@/components/turnstile-gate";
 import { WallKeyPanel } from "@/components/wall-key-panel";
-import { PRICE_USDC } from "@/lib/constants";
+import { BRAND } from "@/lib/brand";
+import { PAY_AT_CLOSE_POLICY } from "@/lib/payment/close-policy";
+import { useSyncedNow } from "@/lib/event/clock";
+import {
+  CLOSED_LOCK_LINE,
+  eventPresentation,
+  remainingMsFrom,
+  remainingNotice,
+} from "@/lib/event/remaining";
 import { rememberOwnedMark } from "@/lib/ownership/store";
+import {
+  PAY_CTA_DOLLARS,
+  classifyCheckoutError,
+  paymentLoadingLine,
+  paymentStepBody,
+  paymentStepTitle,
+  visitorPaymentCopy,
+} from "@/lib/payment/copy";
 import type { PaymentNetwork } from "@/lib/payment/types";
 import { ensureAnonymousSession } from "@/lib/session-client";
+import { useSheetBox } from "@/lib/ui/sheet-viewport";
+import { cn } from "@/lib/utils";
 
 type Step =
   | "write"
@@ -30,9 +49,11 @@ type Props = {
   enabled: boolean;
   endsAt: string;
   serverNow: string;
+  editionNumber?: number;
 };
 
 const BUSY: Step[] = ["creating", "paying", "verifying"];
+const SETTLE: Step[] = ["paying", "pending", "verifying", "celebrate"];
 const CHECKOUT_STORAGE = "thewall:checkout";
 
 type StoredCheckout = {
@@ -75,26 +96,18 @@ function clearStoredCheckout() {
   }
 }
 
-function titleFor(step: Step): string {
-  if (step === "write") return "Leave your mark";
-  if (step === "preview") return "This is the sentence";
-  if (step === "challenge") return "Confirm you are human";
-  if (step === "ticket") return "Save your Wall Key";
-  if (step === "confirm") return "One dollar. One sentence.";
-  if (step === "creating") return "Preparing checkout";
-  if (step === "paying") return "Waiting for payment";
-  if (step === "verifying") return "The Wall is checking the chain";
-  if (step === "pending") return "The payment is still arriving";
-  if (step === "celebrate") return "You are on The Wall";
-  return "Something stopped";
+type DialogError = { title: string; recovery: string; money?: string; code?: string };
+
+function asDialogError(code: string | undefined, fallback?: { title?: string; recovery?: string }): DialogError {
+  return { ...visitorPaymentCopy(code, fallback), code };
 }
 
-export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }: Props) {
+export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow, editionNumber }: Props) {
   const [text, setText] = useState("");
   const [previewText, setPreviewText] = useState("");
   const [token, setToken] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("write");
-  const [error, setError] = useState<{ title: string; recovery: string } | null>(null);
+  const [error, setError] = useState<DialogError | null>(null);
   const [result, setResult] = useState<{
     publicNumber: number;
     ownershipToken: string;
@@ -111,14 +124,31 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
     simulatedPaymentId?: string;
   } | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
+  const [keySaved, setKeySaved] = useState(false);
   const [simulated, setSimulated] = useState(false);
   const [checkout, setCheckout] = useState<{
     intentId: string;
     paymentId: string;
     expiresAt: string;
   } | null>(null);
+  const verifyRetryRef = useRef<number | null>(null);
+  const verifyAttemptsRef = useRef(0);
+  const wallKeyRef = useRef<string | null>(null);
+  wallKeyRef.current = wallKey;
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const alertRef = useRef<HTMLDivElement>(null);
+  const sheetBox = useSheetBox(open);
 
   const busy = BUSY.includes(step);
+  const now = useSyncedNow(serverNow);
+  const remaining = remainingMsFrom(endsAt, now);
+  const accepting = enabled && remaining > 0;
+  const notice = remainingNotice(eventPresentation(accepting ? "live" : "finalizing", remaining), remaining);
+  const closedOut = open && !accepting && !SETTLE.includes(step) && !(step === "error" && checkout);
+  const shownStep = closedOut ? "error" : step;
+  const shownError = closedOut
+    ? { title: BRAND.closedMark, recovery: CLOSED_LOCK_LINE }
+    : error;
 
   useEffect(() => {
     if (!open) return;
@@ -134,12 +164,18 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
           expiresAt: stored.expiresAt,
         });
         if (stored.text) setPreviewText(stored.text);
-        if (stored.wallKey) setWallKey(stored.wallKey);
+        if (stored.wallKey) {
+          setWallKey(stored.wallKey);
+          wallKeyRef.current = stored.wallKey;
+        }
         setStep("pending");
-        setError({
-          title: "A payment may already be in progress",
-          recovery: "Retry verification — do not send another payment.",
-        });
+        setError(
+          asDialogError("PAYMENT_PENDING", {
+            title: "A $1 payment may already be in progress",
+            recovery: "Confirming this payment — do not pay again.",
+          }),
+        );
+        void verifyOnServer(stored.intentId, stored.paymentId, stored.wallKey);
       }, 0);
     } else {
       void fetch("/api/analytics", {
@@ -179,6 +215,7 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
     return () => {
       cancelled = true;
       if (restoreId !== undefined) window.clearTimeout(restoreId);
+      if (verifyRetryRef.current !== null) window.clearTimeout(verifyRetryRef.current);
     };
   }, [open]);
 
@@ -189,77 +226,102 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
     setPreviewText("");
     setResult(null);
     setWallKey(null);
+    setKeySaved(false);
     setPrepared(null);
     setCheckout(null);
     clearStoredCheckout();
   }
 
-  async function verifyOnServer(intentId: string, paymentId: string) {
+  function clearVerifyRetry() {
+    if (verifyRetryRef.current !== null) {
+      window.clearTimeout(verifyRetryRef.current);
+      verifyRetryRef.current = null;
+    }
+  }
+
+  function scheduleVerifyRetry(intentId: string, paymentId: string) {
+    clearVerifyRetry();
+    if (verifyAttemptsRef.current >= 12) return;
+    verifyAttemptsRef.current += 1;
+    verifyRetryRef.current = window.setTimeout(() => {
+      void verifyOnServer(intentId, paymentId);
+    }, 4000);
+  }
+
+  async function verifyOnServer(intentId: string, paymentId: string, ownershipKey?: string) {
     setStep("verifying");
     setError(null);
-    const verifyRes = await fetch("/api/publish/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        intentId,
-        transactionHash: paymentId,
-      }),
-    });
-    const verified = await verifyRes.json();
-    if (verifyRes.ok) {
-      const key = wallKey ?? "";
-      setResult({
-        publicNumber: verified.publicNumber,
-        ownershipToken: key,
-        text: previewText || text.trim(),
+    try {
+      const verifyRes = await fetch("/api/publish/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          intentId,
+          transactionHash: paymentId,
+        }),
       });
-      if (key) {
-        rememberOwnedMark({
-          message: verified.publicNumber,
-          claimKey: key,
+      const verified = await verifyRes.json();
+      if (verifyRes.ok && typeof verified.publicNumber === "number") {
+        clearVerifyRetry();
+        verifyAttemptsRef.current = 0;
+        const key = ownershipKey ?? wallKeyRef.current ?? "";
+        setResult({
+          publicNumber: verified.publicNumber,
+          ownershipToken: key,
           text: previewText || text.trim(),
-          publishedAt: verified.publishedAt,
         });
+        if (key) {
+          rememberOwnedMark({
+            message: verified.publicNumber,
+            claimKey: key,
+            text: previewText || text.trim(),
+            publishedAt: verified.publishedAt,
+          });
+        }
+        setStep("celebrate");
+        clearStoredCheckout();
+        return;
       }
-      setStep("celebrate");
-      clearStoredCheckout();
-      return;
+      if (verified.code === "PAYMENT_PENDING") {
+        setStep("pending");
+        setError(asDialogError(verified.code, { title: verified.error, recovery: verified.recovery }));
+        scheduleVerifyRetry(intentId, paymentId);
+        return;
+      }
+      clearVerifyRetry();
+      setStep("error");
+      setError(asDialogError(verified.code, { title: verified.error, recovery: verified.recovery }));
+    } catch {
+      clearVerifyRetry();
+      setStep("error");
+      setError(asDialogError("UNAVAILABLE"));
     }
-    if (verified.code === "PAYMENT_PENDING") {
-      setStep("pending");
-      setError({
-        title: verified.error ?? "Payment is still confirming",
-        recovery: verified.recovery ?? "Keep this window open. Retry verification — do not pay again.",
-      });
-      return;
-    }
-    setStep("error");
-    setError({
-      title: verified.error ?? "Verification failed",
-      recovery: verified.recovery ?? "If USDC left your wallet, wait and retry verification — do not pay twice.",
-    });
   }
 
   async function goPreview() {
-    if (!composerCanContinue(text)) return;
+    if (!accepting || !composerCanContinue(text)) return;
     setError(null);
     setPreviewText(text.trim());
     setStep("preview");
   }
 
   async function goChallenge() {
+    if (!accepting) return;
     setError(null);
     const res = await fetch("/api/publish/preflight", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: previewText || text }),
+      body: JSON.stringify({
+        message: previewText || text,
+        ...(token ? { turnstileToken: token } : {}),
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
       setStep("write");
       setError({
         title: data.error ?? "This sentence cannot be published",
-        recovery: data.recovery ?? "Revise the text. You have not been charged.",
+        recovery: data.recovery ?? "Please revise it. You have not been charged.",
       });
       return;
     }
@@ -268,12 +330,16 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
       void issueTicket("simulation-local");
       return;
     }
+    if (token) {
+      void issueTicket();
+      return;
+    }
     setStep("challenge");
   }
 
   async function issueTicket(overrideToken?: string) {
     const challenge = overrideToken ?? token;
-    if (!enabled || !challenge || !composerCanContinue(previewText || text)) return;
+    if (!accepting || !challenge || !composerCanContinue(previewText || text)) return;
     if (prepared && wallKey) {
       setStep("ticket");
       return;
@@ -319,8 +385,10 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
   }
 
   async function publish() {
-    if (!enabled || !prepared || !wallKey || !composerCanContinue(previewText || text)) return;
+    if (!accepting || !prepared || !wallKey || !composerCanContinue(previewText || text)) return;
     setError(null);
+    verifyAttemptsRef.current = 0;
+    clearVerifyRetry();
     try {
       void fetch("/api/analytics", {
         method: "POST",
@@ -343,52 +411,48 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
           paymentId = paid.id;
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message.toLowerCase() : "";
         setStep("confirm");
-        if (message.includes("user rejected") || message.includes("denied") || message.includes("cancel")) {
-          setError({
-            title: "Payment canceled",
-            recovery: "No message was published. Your Wall Key is still valid for this checkout.",
-          });
-          return;
-        }
-        if (message.includes("insufficient")) {
-          setError({
-            title: "Insufficient USDC",
-            recovery: "Add 1.00 USDC on Base, then try again. Do not connect a wallet as an account.",
-          });
-          return;
-        }
-        setError({
-          title: "Payment failed",
-          recovery: "Payment did not complete. You have not been charged for a message.",
-        });
+        setError(asDialogError(classifyCheckoutError(err)));
         return;
       }
 
-      setCheckout({
+      const nextCheckout = {
         intentId: prepared.intentId,
         paymentId,
         expiresAt: prepared.expiresAt,
-      });
+      };
+      setCheckout(nextCheckout);
       persistCheckout({
-        intentId: prepared.intentId,
-        paymentId,
-        expiresAt: prepared.expiresAt,
+        ...nextCheckout,
         text: previewText || text.trim(),
         wallKey,
       });
       await verifyOnServer(prepared.intentId, paymentId);
     } catch {
-      setStep(checkout ? "error" : "confirm");
-      setError({
-        title: "Network failure",
-        recovery: "Check your connection and try again. You have not been charged unless payment already completed.",
-      });
+      setStep("error");
+      setError(
+        asDialogError(undefined, {
+          title: "The Wall could not confirm the payment yet",
+          recovery: "If you already paid, tap Confirm payment. Do not pay again.",
+        }),
+      );
     }
   }
 
-  const canRetryVerify = Boolean(checkout?.paymentId) && (step === "pending" || step === "error");
+  const paidAfterClose = error?.code === "PAID_AFTER_CLOSE";
+  const canRetryVerify =
+    Boolean(checkout?.paymentId) && (step === "pending" || step === "error") && !paidAfterClose;
+  const docked = !closedOut && step !== "celebrate";
+  const loadingLine = paymentLoadingLine(step, !prepared);
+
+  useEffect(() => {
+    bodyRef.current?.scrollTo?.({ top: 0 });
+  }, [step]);
+
+  useEffect(() => {
+    if (!shownError) return;
+    alertRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [shownError]);
 
   return (
     <Dialog.Root
@@ -411,7 +475,15 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay fixed inset-0 z-50" />
         <Dialog.Content
-          className="dialog-sheet fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-y-auto border-t p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[min(34rem,calc(100vw-2rem))] sm:max-h-[90dvh] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:border sm:p-8"
+          className={cn(
+            "dialog-sheet fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] border-t p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[min(34rem,calc(100vw-2rem))] sm:max-h-[90dvh] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:border sm:p-8",
+            docked ? "dialog-sheet-flow" : "overflow-y-auto",
+          )}
+          style={
+            sheetBox
+              ? { top: sheetBox.top, height: sheetBox.height, maxHeight: sheetBox.height, bottom: "auto" }
+              : undefined
+          }
           onPointerDownOutside={(event) => {
             if (busy) event.preventDefault();
           }}
@@ -419,26 +491,18 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
             if (busy) event.preventDefault();
           }}
         >
-          {step !== "celebrate" ? (
+          <div ref={bodyRef} className={docked ? "dialog-body" : undefined}>
+          {shownStep !== "celebrate" ? (
             <>
               <p className="kicker">
-                Write → Preview → Key → Pay
+                {notice ? <span className="text-flame">{notice} </span> : null}
+                Write. Preview. Your Wall Key. Pay $1.
               </p>
-              <Dialog.Title className="mt-4 font-display text-[clamp(1.85rem,5vw,2.35rem)] leading-[0.95] text-paper">
-                {titleFor(step)}
+              <Dialog.Title className="mt-4 pr-14 font-display text-[clamp(1.85rem,5vw,2.35rem)] leading-[0.95] text-paper">
+                {closedOut ? BRAND.closed : paymentStepTitle(step)}
               </Dialog.Title>
               <Dialog.Description className="lede mt-3 text-[0.95rem]">
-                {step === "write"
-                  ? "140 characters. No name. No edit after it is on the wall."
-                  : step === "preview"
-                    ? "This is exactly how the wall will show it. No profile. No second draft after payment."
-                    : step === "challenge"
-                      ? "A quick check so the wall stays a monument, not a bot farm."
-                      : step === "ticket"
-                        ? "This is your coat-check ticket. Payment is not identity. Whoever holds this key owns the sentence."
-                      : step === "confirm"
-                        ? `${PRICE_USDC} USDC on Base. Pay only — no account, no email, no wallet sign-in.`
-                        : "Do not close this window."}
+                {closedOut ? CLOSED_LOCK_LINE : paymentStepBody(step)}
               </Dialog.Description>
             </>
           ) : (
@@ -457,10 +521,11 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
               endsAt={endsAt}
               serverNow={serverNow}
               ownershipToken={result.ownershipToken}
+              editionNumber={editionNumber}
             />
           ) : null}
 
-          {step === "write" || (step === "error" && !checkout && !previewText) ? (
+          {accepting && (step === "write" || (step === "error" && !checkout && !previewText)) ? (
             <div className="mt-6">
               <MessageComposer
                 value={text}
@@ -475,82 +540,83 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
             </div>
           ) : null}
 
-          {step === "preview" ? (
+          {!closedOut && step === "preview" ? (
             <blockquote className="inscribe mt-8 p-5 sm:p-6">
               <p className="font-display text-2xl leading-snug text-paper sm:text-3xl">“{previewText}”</p>
             </blockquote>
           ) : null}
 
-          {step === "challenge" ? (
+          {!closedOut && (step === "preview" || step === "challenge") && !simulated ? (
             <div className="mt-6">
               <TurnstileGate onToken={setToken} />
             </div>
           ) : null}
 
-          {step === "ticket" && wallKey ? (
+          {!closedOut && step === "ticket" && wallKey ? (
             <div className="mt-6">
               <WallKeyPanel wallKey={wallKey} text={previewText} />
             </div>
           ) : null}
 
-          {step === "confirm" || step === "creating" || step === "paying" || step === "verifying" ? (
+          {!closedOut &&
+          (step === "ticket" ||
+            step === "confirm" ||
+            step === "creating" ||
+            step === "paying" ||
+            step === "verifying" ||
+            step === "pending" ||
+            (step === "error" && Boolean(checkout))) ? (
             <blockquote className="pay-plaque mt-6 p-5">
               <p className="kicker text-bronze">To be inscribed</p>
               <p className="mt-3 font-display text-xl leading-snug text-paper sm:text-2xl">“{previewText}”</p>
               <p className="mt-5 font-mono text-sm tracking-[0.18em] text-bronze">
-                {PRICE_USDC} USDC · Base
+                $1
               </p>
               <p className="mt-2 text-xs leading-relaxed text-ash">
-                Payment publishes the sentence. Your Wall Key is ownership. The paying wallet is not your identity.
+                One dollar, once. No account. Payment is not your name.
               </p>
               {prepared?.simulated ? (
                 <p className="mt-3 text-xs leading-relaxed text-bronze">
-                  Simulation — no USDC leaves a wallet.
+                  Practice mode — no money is taken.
                 </p>
               ) : null}
             </blockquote>
           ) : null}
 
-          {error && step !== "celebrate" ? (
-            <div className="mt-4 border border-blood/40 bg-blood/10 p-3" role="alert">
-              <p className="text-sm text-paper">{error.title}</p>
-              <p className="mt-1 text-sm text-mist">{error.recovery}</p>
+          {shownError && shownStep !== "celebrate" ? (
+            <div ref={alertRef}>
+              <FailureRecovery
+                title={shownError.title}
+                body={shownError.recovery}
+                money={shownError.money}
+                policy={shownError.code === "PAID_AFTER_CLOSE" ? PAY_AT_CLOSE_POLICY.visitorLine : undefined}
+              />
             </div>
           ) : null}
 
-          {step === "creating" ? (
-            <p className="mt-5 flex items-center gap-2 text-sm text-mist">
+          {!closedOut && loadingLine ? (
+            <p className="mt-5 flex items-center gap-2 text-sm text-mist" role="status" aria-live="polite">
               <span className="live-dot" aria-hidden="true" />
-              {prepared ? `Preparing a ${PRICE_USDC} USDC checkout…` : "Issuing your Wall Key…"}
+              {loadingLine}
             </p>
           ) : null}
-          {step === "paying" ? (
-            <p className="mt-5 flex items-center gap-2 text-sm text-mist">
-              <span className="live-dot" aria-hidden="true" />
-              Waiting for payment. Do not close this window.
-            </p>
-          ) : null}
-          {step === "verifying" ? (
-            <p className="mt-5 flex items-center gap-2 text-sm text-mist">
-              <span className="live-dot" aria-hidden="true" />
-              Verifying the transaction on Base. Publishing waits for this.
-            </p>
-          ) : null}
-          {step === "pending" ? (
-            <p className="mt-5 text-sm text-mist">
-              The payment is still confirming. Retry verification — do not send another payment.
-            </p>
-          ) : null}
+          </div>
 
-          {step === "celebrate" ? null : (
-            <div className="mt-6 flex flex-col gap-2">
+          {docked ? (
+            <div className="dialog-dock">
+              {loadingLine ? (
+                <p className="dialog-dock-status" aria-hidden="true">
+                  <span className="live-dot" aria-hidden="true" />
+                  {loadingLine}
+                </p>
+              ) : null}
               {canRetryVerify && checkout ? (
                 <button
                   type="button"
                   onClick={() => void verifyOnServer(checkout.intentId, checkout.paymentId)}
                   className="btn btn-line w-full"
                 >
-                  Retry verification
+                  Confirm payment
                 </button>
               ) : null}
 
@@ -565,7 +631,7 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
                     }
                     void goPreview();
                   }}
-                  disabled={!enabled || !sessionReady || !composerCanContinue(text) || busy}
+                  disabled={!accepting || !sessionReady || !composerCanContinue(text) || busy}
                   className="btn btn-primary w-full"
                 >
                   {step === "error" ? "Revise sentence" : "Preview"}
@@ -588,7 +654,7 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
                       setStep("write");
                       setError(null);
                     }}
-                    className="btn-ghost"
+                    className="btn-ghost min-h-11"
                   >
                     Edit sentence
                   </button>
@@ -611,7 +677,7 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
                       setStep("preview");
                       setToken(null);
                     }}
-                    className="btn-ghost"
+                    className="btn-ghost min-h-11"
                   >
                     Back to preview
                   </button>
@@ -620,18 +686,27 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
 
               {step === "ticket" ? (
                 <>
+                  <label className="flex items-start gap-3 text-left text-sm leading-relaxed text-mist">
+                    <input
+                      type="checkbox"
+                      checked={keySaved}
+                      onChange={(event) => setKeySaved(event.target.checked)}
+                      className="mt-1 size-4 shrink-0 accent-[var(--ember)]"
+                    />
+                    I saved my Wall Key
+                  </label>
                   <button
                     type="button"
-                    onClick={() => setStep("confirm")}
-                    disabled={!wallKey}
-                    className="btn btn-primary w-full"
+                    onClick={() => void publish()}
+                    disabled={!accepting || !sessionReady || !prepared || !wallKey || !keySaved || busy}
+                    className="btn btn-ember w-full"
                   >
-                    I saved my Wall Key
+                    {PAY_CTA_DOLLARS}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setStep("challenge")}
-                    className="btn-ghost"
+                    onClick={() => setStep(simulated || token ? "preview" : "challenge")}
+                    className="btn-ghost min-h-11"
                   >
                     Back
                   </button>
@@ -643,15 +718,15 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
                   <button
                     type="button"
                     onClick={() => void publish()}
-                    disabled={!enabled || !sessionReady || !prepared || !wallKey || busy}
+                    disabled={!accepting || !sessionReady || !prepared || !wallKey || busy}
                     className="btn btn-ember w-full"
                   >
-                    Pay {PRICE_USDC} USDC
+                    {PAY_CTA_DOLLARS}
                   </button>
                   <button
                     type="button"
                     onClick={() => setStep("ticket")}
-                    className="btn-ghost"
+                    className="btn-ghost min-h-11"
                   >
                     Back to Wall Key
                   </button>
@@ -666,16 +741,16 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow }
                     setError(null);
                     setToken(null);
                   }}
-                  className="btn-ghost"
+                  className="btn-ghost min-h-11"
                 >
-                  Start over — you have not been charged
+                  Start over — no money was taken
                 </button>
               ) : null}
             </div>
-          )}
+          ) : null}
 
           {busy ? null : (
-            <Dialog.Close className="btn-ghost absolute right-3 top-3 min-w-11 tracking-[0.12em] sm:right-4 sm:top-4">
+            <Dialog.Close className="btn-ghost absolute right-3 top-3 min-h-11 min-w-11 tracking-[0.12em] sm:right-4 sm:top-4">
               Close
             </Dialog.Close>
           )}

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BRAND } from "@/lib/brand";
 import type { EventPhase } from "@/lib/event/state";
 import { cn } from "@/lib/utils";
 
@@ -23,13 +24,20 @@ export function PrimaryCta({
   if (phase === "live") {
     return (
       <button type="button" onClick={onPublish} className={cn("btn btn-primary", className)}>
-        Leave your mark
+        {BRAND.leaveYourMarkCta}
       </button>
+    );
+  }
+  if (phase === "finalizing") {
+    return (
+      <Link href="/wall" className={cn("btn btn-primary", className)}>
+        {BRAND.closed}
+      </Link>
     );
   }
   return (
     <Link href="/archive" className={cn("btn btn-primary", className)}>
-      Enter the archive
+      {BRAND.enterArchive}
     </Link>
   );
 }
