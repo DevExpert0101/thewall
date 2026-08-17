@@ -44,7 +44,7 @@ describe("edge proxy matcher", () => {
     expect(src).toContain("api/");
     expect(src).toContain("opengraph-image");
     expect(src).toContain("twitter-image");
-    expect(src).not.toContain("x-nonce");
+    expect(src).toContain("x-nonce");
   });
 });
 

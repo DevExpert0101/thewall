@@ -33,6 +33,15 @@ export async function pageScriptHashes(): Promise<string[]> {
   return Promise.all([sha256Base64(THEME_BOOT_SCRIPT), sha256Base64(siteJsonLdScript())]);
 }
 
+/** One-time CSP nonce. Must be unique per HTML request. */
+export function createCspNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
 export function contentSecurityPolicy(
   nonce: string,
   isDev = false,

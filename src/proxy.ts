@@ -1,20 +1,21 @@
 import { NextRequest } from "next/server";
 import { withSupabaseSession } from "@/lib/supabase/proxy-client";
-import { contentSecurityPolicy, pageScriptHashes } from "@/lib/security/csp";
+import { contentSecurityPolicy, createCspNonce, pageScriptHashes } from "@/lib/security/csp";
 
-let cachedProductionCsp: string | null = null;
+let cachedPageHashes: string[] | null = null;
 
-async function pageCsp(): Promise<string> {
+async function pageCsp(nonce: string): Promise<string> {
   const isDev = process.env.NODE_ENV !== "production";
-  if (isDev) return contentSecurityPolicy("", true);
-  if (cachedProductionCsp) return cachedProductionCsp;
-  cachedProductionCsp = contentSecurityPolicy("", false, await pageScriptHashes());
-  return cachedProductionCsp;
+  if (isDev) return contentSecurityPolicy(nonce, true);
+  cachedPageHashes ??= await pageScriptHashes();
+  return contentSecurityPolicy(nonce, false, cachedPageHashes);
 }
 
 export async function proxy(request: NextRequest) {
-  const csp = await pageCsp();
+  const nonce = createCspNonce();
+  const csp = await pageCsp(nonce);
   const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
   const tagged = new NextRequest(request, { headers: requestHeaders });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contentSecurityPolicy, serializeJsonLd } from "@/lib/security/csp";
+import { contentSecurityPolicy, createCspNonce, serializeJsonLd } from "@/lib/security/csp";
 
 describe("content security policy", () => {
   it("issues a nonce policy that forbids plugins and does not embed secrets", () => {
@@ -13,6 +13,14 @@ describe("content security policy", () => {
     expect(header).not.toContain("unsafe-eval");
     expect(header).toContain("style-src 'self' 'unsafe-inline'");
     expect(header).not.toMatch(/style-src [^;]*nonce/);
+  });
+
+  it("mints a unique nonce for each HTML request", () => {
+    const first = createCspNonce();
+    const second = createCspNonce();
+    expect(first).toMatch(/^[A-Za-z0-9+/=]+$/);
+    expect(first).not.toBe(second);
+    expect(contentSecurityPolicy(first, false)).toContain(`'nonce-${first}'`);
   });
 
   it("can lock inline scripts to hashes so HTML does not need a per-request nonce", async () => {

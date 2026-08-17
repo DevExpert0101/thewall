@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Cinzel, Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import { SiteShell } from "@/components/site-shell";
 import { APP_NAME, SUPPORTING_COPY, TAGLINE } from "@/lib/constants";
@@ -66,6 +67,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html
       lang="en"
@@ -75,7 +77,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} ${instrument.variable} ${cinzel.variable} h-full antialiased`}
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
       <body className="grain min-h-full bg-stone font-sans text-paper">
         <div className="atmosphere" aria-hidden="true">
