@@ -115,9 +115,8 @@ export function serializeCanonicalArchive(body: CanonicalArchive): string {
 }
 
 export function archiveBodyOf(sealed: SealedArchive): CanonicalArchive {
-  return Object.fromEntries(
-    Object.entries(sealed).filter(([key]) => key !== "archiveHash"),
-  ) as CanonicalArchive;
+  const { archiveHash: _hash, ...body } = sealed;
+  return body;
 }
 
 export function toCanonicalMessages(messages: PublicMessage[]): CanonicalMessage[] {

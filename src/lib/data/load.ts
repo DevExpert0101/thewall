@@ -141,11 +141,7 @@ export async function listSpectatorPage(
   });
   const page = pageWindow(woven, input.cursor, limit);
   return {
-    messages: page.items.map((card) => {
-      const message = { ...card };
-      Reflect.deleteProperty(message, "lane");
-      return message;
-    }),
+    messages: page.items.map(({ lane: _lane, ...message }) => message),
     nextCursor: page.nextCursor,
     lanes: lanesFromCards(page.items),
   };
