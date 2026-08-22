@@ -1121,6 +1121,7 @@ function patchSimulatedArchiveMessage(messages: PublicMessage[], next: PublicMes
   const index = messages.findIndex((row) => row.publicNumber === next.publicNumber);
   if (index < 0) return;
   const current = messages[index];
+  if (!current) return;
   messages[index] = {
     ...current,
     isRemoved: next.isRemoved,

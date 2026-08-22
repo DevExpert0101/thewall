@@ -25,7 +25,10 @@ export function useSheetBox(active: boolean): SheetBox | null {
   const [box, setBox] = useState<SheetBox | null>(null);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      setBox(null);
+      return;
+    }
     const sync = () => setBox(readSheetBox());
     sync();
     const vv = window.visualViewport;

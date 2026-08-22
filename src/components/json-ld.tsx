@@ -3,7 +3,7 @@ import { siteJsonLdScript } from "@/lib/security/csp";
 import type { EventSnapshot } from "@/lib/types";
 
 /** Stable site graph. Live phase stays in Open Graph, not in this hashed script. */
-export async function JsonLd({}: { event: EventSnapshot }) {
+export async function JsonLd(_props: { event: EventSnapshot }) {
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <script

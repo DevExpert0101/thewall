@@ -146,7 +146,7 @@ export function PublishDialog({ open, onOpenChange, enabled, endsAt, serverNow, 
   const notice = remainingNotice(eventPresentation(accepting ? "live" : "finalizing", remaining), remaining);
   const closedOut = open && !accepting && !SETTLE.includes(step) && !(step === "error" && checkout);
   const shownStep = closedOut ? "error" : step;
-  const closedError = useMemo(
+  const closedError = useMemo<DialogError>(
     () => ({ title: BRAND.closedMark, recovery: CLOSED_LOCK_LINE }),
     [],
   );
