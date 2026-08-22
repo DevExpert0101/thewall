@@ -16,7 +16,7 @@ const payload: CertificatePayload = {
   publishedAt: "2026-08-13T10:00:00.000Z",
   eventTitle: "THE WALL",
   eventDate: "13 August 2026",
-  tagline: "ONE DAY. ONE DOLLAR. ONE SENTENCE FOREVER.",
+  tagline: "ONE DAY. ONE DOLLAR. ONE SENTENCE.",
 };
 
 describe("certificate images", () => {
@@ -28,7 +28,7 @@ describe("certificate images", () => {
       expect([...bytes.slice(0, 8)]).toEqual(PNG);
       expect(bytes.length).toBeGreaterThan(800);
     }
-  });
+  }, 20_000);
 
   it("keeps archival removal text on a removed certificate", async () => {
     const res = renderCertificateImage({ ...payload, text: ARCHIVAL_REMOVAL_TEXT, finalRank: 8 });

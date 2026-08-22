@@ -49,7 +49,9 @@ export function ReportMessage({
   return (
     <div id="report" className="border-t border-line pt-8">
       {status === "ok" ? (
-        <p className="text-sm text-mist">Report received. Moderators will review it privately.</p>
+        <p className="text-sm text-mist" role="status">
+          Report received. Moderators will review it privately.
+        </p>
       ) : open ? (
         <form onSubmit={(event) => void submit(event)} className="max-w-md">
           <p className="kicker">Report this sentence</p>
@@ -78,7 +80,7 @@ export function ReportMessage({
           ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <button type="submit" disabled={disabled || status === "sending"} className="btn btn-line">
-              {status === "sending" ? "Sending…" : "Submit report"}
+              {status === "sending" ? "Sending…" : "Send report"}
             </button>
             <button
               type="button"

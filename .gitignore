@@ -12,6 +12,9 @@
 
 # testing
 /coverage
+/playwright-report
+/test-results
+/blob-report
 
 # local simulation ledger (pay / finish / archive)
 .thewall-local/
@@ -38,6 +41,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+!.env.test.example
+.env.example
+.env.local
 
 # vercel
 .vercel

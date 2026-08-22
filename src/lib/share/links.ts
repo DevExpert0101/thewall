@@ -31,8 +31,8 @@ export function redditShareUrl(url: string, title: string): string {
   return submit.toString();
 }
 
-const SHARE_PATH = /^\/(?:wall|archive|about|records)?$/;
-const MESSAGE_PATH = /^\/message\/(\d{1,8})$/;
+const SHARE_PATH = /^\/(?:wall|watch|open|archive|about|how-it-works|records)?$/;
+const MESSAGE_PATH = /^\/message\/(\d{1,8})(?:\/certificate)?$/;
 const EDITION_PATH = /^\/archive\/\d{1,6}(?:\/(?:records|\d{1,8}))?$/;
 
 export function parseShareableUrl(raw: string, origin = siteUrl()): URL | null {
@@ -61,15 +61,42 @@ export function oembedEndpoint(canonicalUrl: string, origin = siteUrl()): string
   return href.toString();
 }
 
-export function creativeImageUrl(input: {
+type CreativeImageInput = {
   kind: "countdown" | "milestone" | "message" | "certificate";
   ratio?: string;
   number?: number;
-  origin?: string;
-}): string {
-  const href = new URL("/api/creatives", input.origin ?? siteUrl());
+  edition?: number;
+  mark?: number;
+  fire?: number;
+};
+
+/** Same-origin path. Use this for <img> and downloads so Vercel never points at localhost. */
+export function creativeImagePath(input: CreativeImageInput): string {
+  const href = new URL("/api/creatives", "https://thewall.local");
   href.searchParams.set("kind", input.kind);
   href.searchParams.set("ratio", input.ratio ?? "1200x630");
   if (input.number) href.searchParams.set("number", String(input.number));
-  return href.toString();
+  if (input.edition) href.searchParams.set("edition", String(input.edition));
+  if (input.mark) href.searchParams.set("mark", String(input.mark));
+  if (input.fire) href.searchParams.set("fire", String(input.fire));
+  return `${href.pathname}${href.search}`;
+}
+
+export function creativeImageUrl(input: CreativeImageInput & { origin?: string }): string {
+  return `${input.origin ?? siteUrl()}${creativeImagePath(input)}`;
+}
+
+export function messageNumberFromSharePath(path: string): number | null {
+  const message = path.match(/\/message\/(\d{1,8})(?:\/|$)/);
+  if (message) return Number(message[1]);
+  const edition = path.match(/\/archive\/\d{1,6}\/(\d{1,8})(?:\/|$)/);
+  if (edition) return Number(edition[1]);
+  return null;
+}
+
+export function editionNumberFromSharePath(path: string): number | null {
+  const match = path.match(/^\/archive\/(\d{1,6})(?:\/|$)/);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isInteger(n) && n > 0 ? n : null;
 }

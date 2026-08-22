@@ -1,10 +1,11 @@
 import { jsonError, jsonOk } from "@/lib/http";
-import { PULSE_CACHE_CONTROL, eventSlug, getEventSnapshot } from "@/lib/data/event";
+import { eventSlug, getEventSnapshot, pulseCacheControl } from "@/lib/data/event";
 import { getReactionCounts } from "@/lib/data/messages";
 import { deriveEventPhase } from "@/lib/event/state";
 import { hasSupabaseConfig, isSimulation } from "@/lib/env";
 import { createServiceSupabase } from "@/lib/supabase/admin";
 import { pulseQuerySchema } from "@/lib/validation";
+import type { EventSnapshot } from "@/lib/types";
 
 type PulseRow = {
   starts_at: string;
@@ -13,8 +14,27 @@ type PulseRow = {
   finalized_at: string | null;
   total_messages: number;
   total_reactions: number;
+  latest_public_number?: number;
   counts: Record<string, number>;
 };
+
+function fromSnapshot(
+  event: EventSnapshot,
+  counts: Record<string, number>,
+  latestPublicNumber?: number,
+) {
+  return {
+    counts,
+    totalMessages: event.totalMessages,
+    totalReactions: event.totalReactions,
+    latestPublicNumber: latestPublicNumber ?? event.totalMessages,
+    phase: event.phase,
+    serverNow: event.serverNow,
+    startsAt: event.startsAt,
+    endsAt: event.endsAt,
+    editionNumber: event.editionNumber,
+  };
+}
 
 export async function GET(request: Request) {
   try {
@@ -23,56 +43,31 @@ export async function GET(request: Request) {
       ids: url.searchParams.get("ids") ?? "",
       eventId: url.searchParams.get("eventId") ?? undefined,
     });
+    const hasIds = parsed.ids.length > 0;
+    const cache = isSimulation() ? "private, no-store" : pulseCacheControl(hasIds);
 
     if (isSimulation() || !hasSupabaseConfig()) {
       const event = await getEventSnapshot(eventSlug());
-      const counts = await getReactionCounts(event.id, parsed.ids);
-      return jsonOk(
-        {
-          counts,
-          totalMessages: event.totalMessages,
-          totalReactions: event.totalReactions,
-          phase: event.phase,
-          serverNow: event.serverNow,
-        },
-        { cache: PULSE_CACHE_CONTROL },
-      );
+      const counts = hasIds ? await getReactionCounts(event.id, parsed.ids) : {};
+      return jsonOk(fromSnapshot(event, counts), { cache });
     }
 
-    const db = createServiceSupabase();
     const eventId = parsed.eventId;
     if (!eventId) {
       const event = await getEventSnapshot(eventSlug());
-      const counts = await getReactionCounts(event.id, parsed.ids);
-      return jsonOk(
-        {
-          counts,
-          totalMessages: event.totalMessages,
-          totalReactions: event.totalReactions,
-          phase: event.phase,
-          serverNow: event.serverNow,
-        },
-        { cache: PULSE_CACHE_CONTROL },
-      );
+      const counts = hasIds ? await getReactionCounts(event.id, parsed.ids) : {};
+      return jsonOk(fromSnapshot(event, counts), { cache });
     }
 
+    const db = createServiceSupabase();
     const { data, error } = await db.rpc("wall_pulse", {
       p_event_id: eventId,
       p_ids: parsed.ids,
     });
     if (error || !data) {
       const event = await getEventSnapshot(eventSlug());
-      const counts = await getReactionCounts(event.id, parsed.ids);
-      return jsonOk(
-        {
-          counts,
-          totalMessages: event.totalMessages,
-          totalReactions: event.totalReactions,
-          phase: event.phase,
-          serverNow: event.serverNow,
-        },
-        { cache: PULSE_CACHE_CONTROL },
-      );
+      const counts = hasIds ? await getReactionCounts(event.id, parsed.ids) : {};
+      return jsonOk(fromSnapshot(event, counts), { cache });
     }
 
     const row = data as PulseRow;
@@ -87,10 +82,13 @@ export async function GET(request: Request) {
         counts: row.counts ?? {},
         totalMessages: row.total_messages,
         totalReactions: row.total_reactions,
+        latestPublicNumber: row.latest_public_number ?? row.total_messages,
         phase,
         serverNow: new Date().toISOString(),
+        startsAt: row.starts_at,
+        endsAt: row.ends_at,
       },
-      { cache: PULSE_CACHE_CONTROL },
+      { cache },
     );
   } catch (error) {
     return jsonError(error);

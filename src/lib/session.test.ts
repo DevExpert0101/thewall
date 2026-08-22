@@ -16,6 +16,7 @@ describe("anonymous session creation", () => {
     expect(TURNSTILE_REQUIRED.preflight).toBe(false);
     expect(TURNSTILE_REQUIRED.intent).toBe(true);
     expect(TURNSTILE_REQUIRED.verify).toBe(false);
+    expect(TURNSTILE_REQUIRED.react).toBe(false);
   });
 
   it("persists server sessions as httpOnly SameSite=Lax cookies", () => {

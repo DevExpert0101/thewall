@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { useSyncedNow } from "@/lib/event/clock";
+import {
+  countdownLiveBucket,
+  countdownLiveText,
+  countdownSpokenName,
+  eventPresentation,
+  remainingWholeSeconds,
+  type EventPresentation,
+} from "@/lib/event/remaining";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -9,6 +18,7 @@ type Props = {
   label: string;
   phase: "upcoming" | "live" | "finalizing" | "archived";
   size?: "hero" | "bar";
+  nowMs?: number;
   onZero?: () => void;
 };
 
@@ -24,20 +34,55 @@ function partsFromMs(ms: number) {
   return { hours, minutes, seconds, total };
 }
 
+function ClockFace({
+  label,
+  presentation,
+  remaining,
+  frozen,
+  children,
+  className,
+}: {
+  label: string;
+  presentation: EventPresentation;
+  remaining: number;
+  frozen: boolean;
+  children: ReactNode;
+  className?: string;
+}) {
+  const name = countdownSpokenName(label, remaining, frozen);
+  const bucket = countdownLiveBucket(remaining, frozen || presentation === "closed");
+  const live = countdownLiveText(label, bucket);
+  return (
+    <div className={className} role="group" aria-label={name} data-presentation={presentation}>
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {live}
+      </span>
+      {children}
+    </div>
+  );
+}
+
 export function Countdown({
   targetIso,
   serverNow,
   label,
   phase,
   size = "hero",
+  nowMs,
   onZero,
 }: Props) {
-  const [now, setNow] = useState(() => new Date(serverNow).getTime());
+  const synced = useSyncedNow(serverNow);
+  const now = nowMs ?? synced;
   const remaining = new Date(targetIso).getTime() - now;
   const parts = partsFromMs(remaining);
-  const urgent = phase === "live" && parts.total <= 60 && parts.total > 0;
+  const presentation = eventPresentation(phase, remaining);
+  const lastMinute = presentation === "final-minute" || presentation === "final-seconds";
+  const urgent = lastMinute || presentation === "final-ten";
   const frozen = remaining <= 0 && phase !== "upcoming";
   const digits = `${pad(parts.hours)}:${pad(parts.minutes)}:${pad(parts.seconds)}`;
+  const shownLabel = lastMinute ? (size === "hero" ? "Final seconds" : "Last minute") : label;
+  const shownSeconds = remainingWholeSeconds(remaining);
+  const secondFace = presentation === "final-seconds" ? String(shownSeconds) : pad(shownSeconds);
   const onZeroRef = useRef(onZero);
   const firedRef = useRef(false);
 
@@ -50,30 +95,50 @@ export function Countdown({
   }, [targetIso]);
 
   useEffect(() => {
-    const originClient = Date.now();
-    const originServer = new Date(serverNow).getTime();
-    const tick = () => {
-      const next = originServer + (Date.now() - originClient);
-      setNow(next);
-      if (new Date(targetIso).getTime() - next <= 0 && !firedRef.current) {
-        firedRef.current = true;
-        onZeroRef.current?.();
-      }
-    };
-    const id = window.setInterval(tick, 250);
-    return () => window.clearInterval(id);
-  }, [serverNow, targetIso]);
+    if (remaining > 0 || firedRef.current) return;
+    firedRef.current = true;
+    onZeroRef.current?.();
+  }, [remaining]);
 
   if (size === "bar") {
     return (
-      <div
+      <ClockFace
         className={cn("countdown-bar", urgent && "text-blood", frozen && "opacity-70")}
-        role="timer"
-        aria-live="polite"
-        aria-label={`${label}: ${digits}`}
+        label={shownLabel}
+        presentation={presentation}
+        remaining={remaining}
+        frozen={frozen}
       >
-        <span className="kicker">{label}</span>
-        <span className={cn("countdown-bar-digits", urgent && "text-blood")}>{digits}</span>
+        <span className="kicker" aria-hidden="true">
+          {shownLabel}
+        </span>
+        <span className={cn("countdown-bar-digits", urgent && "text-blood")} aria-hidden="true">
+          {lastMinute ? secondFace : digits}
+        </span>
+      </ClockFace>
+    );
+  }
+
+  if (lastMinute) {
+    return (
+      <div className="countdown-hero countdown-final-minute" data-presentation={presentation}>
+        <p className="kicker" aria-hidden="true">
+          {shownLabel}
+        </p>
+        <ClockFace
+          className="countdown-cells"
+          label={shownLabel}
+          presentation={presentation}
+          remaining={remaining}
+          frozen={frozen}
+        >
+          <div className="countdown-slot" aria-hidden="true">
+            <div className="countdown-cell">
+              <span className="countdown-digit countdown-final-seconds">{secondFace}</span>
+              <span className="countdown-unit">{shownSeconds === 1 ? "Second" : "Seconds"}</span>
+            </div>
+          </div>
+        </ClockFace>
       </div>
     );
   }
@@ -85,17 +150,19 @@ export function Countdown({
   ];
 
   return (
-    <div className="countdown-hero">
-      <p className="kicker">{label}</p>
-      <div
+    <div className="countdown-hero" data-presentation={presentation}>
+      <p className="kicker" aria-hidden="true">
+        {shownLabel}
+      </p>
+      <ClockFace
         className="countdown-cells"
-        role="timer"
-        aria-live="polite"
-        aria-atomic="true"
-        aria-label={`${label}: ${digits}`}
+        label={shownLabel}
+        presentation={presentation}
+        remaining={remaining}
+        frozen={frozen}
       >
         {cells.map((cell, index) => (
-          <div key={cell.unit} className="countdown-slot">
+          <div key={cell.unit} className="countdown-slot" aria-hidden="true">
             {index > 0 ? (
               <span className="countdown-colon" aria-hidden="true">
                 :
@@ -105,7 +172,8 @@ export function Countdown({
               <span
                 className={cn(
                   "countdown-digit",
-                  urgent && "text-blood",
+                  (presentation === "final-hour" || presentation === "final-ten") &&
+                    "countdown-digit-urgent",
                   frozen && "text-ash",
                 )}
               >
@@ -115,7 +183,7 @@ export function Countdown({
             </div>
           </div>
         ))}
-      </div>
+      </ClockFace>
     </div>
   );
 }

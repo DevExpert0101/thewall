@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const revalidate = 60;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-export const alt = "THE WALL — one day, one dollar, one sentence forever";
+export const alt = "THE WALL — one day, one dollar, one sentence";
 
 export default async function Image() {
   try {

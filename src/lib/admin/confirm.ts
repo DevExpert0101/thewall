@@ -1,11 +1,13 @@
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { formatPublicNumber, parsePublicNumber } from "@/lib/utils";
 
-export type DangerousAdminAction = "remove" | "restore" | "dismiss";
+export type DangerousAdminAction = "remove" | "restore" | "dismiss" | "finish" | "ops";
 
 export function expectedConfirmPhrase(action: DangerousAdminAction): string {
   if (action === "remove") return "REMOVE";
   if (action === "restore") return "RESTORE";
+  if (action === "finish") return "FINISH";
+  if (action === "ops") return "OPS";
   return "DISMISS";
 }
 

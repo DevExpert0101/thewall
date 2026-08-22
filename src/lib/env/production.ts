@@ -24,6 +24,11 @@ export function isVercelProduction(env = process.env.VERCEL_ENV): boolean {
   return env === "production";
 }
 
+/** `next build` prerender. Runtime requests must still fail closed. */
+export function isNextProductionBuild(phase = process.env.NEXT_PHASE): boolean {
+  return phase === "phase-production-build";
+}
+
 export function isDummyTurnstile(site?: string, secret?: string): boolean {
   const dummy = new Set<string>(Object.values(TURNSTILE_DUMMY));
   return Boolean((site && dummy.has(site)) || (secret && dummy.has(secret)));

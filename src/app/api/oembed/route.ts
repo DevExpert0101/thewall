@@ -1,3 +1,4 @@
+import { cacheForPhase } from "@/lib/data/event";
 import { loadEvent } from "@/lib/data/load";
 import { getMessageByNumber } from "@/lib/data/messages";
 import { ogCopyForEvent, ogCopyForMessage } from "@/lib/share/copy";
@@ -24,22 +25,27 @@ export async function GET(request: Request) {
 
   const path = target.pathname.replace(/\/$/, "") || "/";
   const origin = siteUrl();
-  let title = APP_NAME;
+  let title: string = APP_NAME;
   let description = "";
   let thumbnail = creativeImageUrl({ kind: "countdown", ratio: "1200x630", origin });
 
+  let cache = "public, s-maxage=60, stale-while-revalidate=30";
   try {
     const event = await loadEvent();
-    const messageMatch = path.match(/^\/(?:message|archive\/\d{1,6})\/(\d{1,8})$/);
+    cache = path.startsWith("/archive")
+      ? "public, s-maxage=3600, stale-while-revalidate=604800"
+      : cacheForPhase(event.phase);
+    const messageMatch = path.match(/^\/(?:message|archive\/\d{1,6})\/(\d{1,8})(?:\/certificate)?$/);
     if (messageMatch) {
       const n = parsePublicNumber(messageMatch[1] ?? "");
       if (n) {
         const message = await getMessageByNumber(event.id, n);
         const copy = ogCopyForMessage({ event, message });
-        title = copy.title;
+        const certificate = path.endsWith("/certificate");
+        title = certificate ? `PUBLIC CERTIFICATE — ${copy.title}` : copy.title;
         description = copy.description;
         thumbnail = creativeImageUrl({
-          kind: "message",
+          kind: certificate ? "certificate" : "message",
           ratio: "1200x630",
           number: n,
           origin,
@@ -74,7 +80,7 @@ export async function GET(request: Request) {
     },
     {
       headers: {
-        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=30",
+        "Cache-Control": cache,
       },
     },
   );

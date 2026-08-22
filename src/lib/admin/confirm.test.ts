@@ -10,6 +10,12 @@ describe("dangerous confirmation", () => {
     expect(confirmTextMatches({ confirmText: "12", action: "remove", publicNumber: 12 })).toBe(true);
     expect(confirmTextMatches({ confirmText: "yes", action: "remove", publicNumber: 12 })).toBe(false);
     expect(confirmTextMatches({ confirmText: "REMOVE", action: "restore", publicNumber: 12 })).toBe(false);
+    expect(expectedConfirmPhrase("finish")).toBe("FINISH");
+    expect(confirmTextMatches({ confirmText: "FINISH", action: "finish" })).toBe(true);
+    expect(confirmTextMatches({ confirmText: "yes", action: "finish" })).toBe(false);
+    expect(expectedConfirmPhrase("ops")).toBe("OPS");
+    expect(confirmTextMatches({ confirmText: "OPS", action: "ops" })).toBe(true);
+    expect(confirmTextMatches({ confirmText: "CLOCK", action: "ops" })).toBe(false);
   });
 
   it("rejects unconfirmed destructive work", () => {

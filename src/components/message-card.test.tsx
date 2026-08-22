@@ -14,6 +14,45 @@ const injected: PublicMessage = {
   finalRank: null,
 };
 
+describe("message identity", () => {
+  it("names the object as an edition and message number", () => {
+    render(
+      <MessageCard
+        message={injected}
+        phase="live"
+        event={{
+          phase: "live",
+          endsAt: "2026-08-13T18:00:00.000Z",
+          serverNow: "2026-08-13T12:00:00.000Z",
+          editionNumber: 1,
+        }}
+      />,
+    );
+    expect(screen.getByText("THE WALL №001 / MESSAGE #000009")).toBeInTheDocument();
+  });
+});
+
+describe("archived message card", () => {
+  it("shows a sealed fire count and no react control", () => {
+    render(
+      <MessageCard
+        message={{ ...injected, reactionCount: 42, finalRank: 1 }}
+        phase="archived"
+        rankLabel="Rank #1"
+        event={{
+          phase: "archived",
+          endsAt: "2026-08-13T18:00:00.000Z",
+          serverNow: "2026-08-13T19:00:00.000Z",
+          editionNumber: 1,
+        }}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /react with fire/i })).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/42 reactions/i)).toBeInTheDocument();
+    expect(screen.getByText(/rank #1/i)).toBeInTheDocument();
+  });
+});
+
 describe("message HTML injection", () => {
   it("renders attacker markup as text, not as a script node", () => {
     const { container } = render(<MessageCard message={injected} phase="live" />);

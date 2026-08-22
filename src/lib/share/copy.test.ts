@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { remainClause, remainingLabel, untilOpenClause } from "@/lib/event/remaining";
-import { sharePayloadForMessage, sharePayloadForEvent, ogCopyForMessage } from "@/lib/share/copy";
-import { composeCreative, resolveCreativeRatio, CREATIVE_SIZES } from "@/lib/share/compose";
-import { creativeImageUrl, parseShareableUrl, redditShareUrl, telegramShareUrl, xShareUrl } from "@/lib/share/links";
+import { closesInClause, remainClause, remainingLabel, untilOpenClause } from "@/lib/event/remaining";
+import { sharePayloadForMessage, sharePayloadForEvent, sharePayloadForMilestone, sharePayloadForWinner, ogCopyForMessage } from "@/lib/share/copy";
+import { cardClockLine, composeCreative, resolveCreativeRatio, CREATIVE_SIZES } from "@/lib/share/compose";
+import { parseMilestoneQuery } from "@/lib/milestones/engine";
+import { creativeImagePath, creativeImageUrl, editionNumberFromSharePath, messageNumberFromSharePath, parseShareableUrl, redditShareUrl, telegramShareUrl, xShareUrl } from "@/lib/share/links";
 import { publicMessageMetadata, publicPageMetadata } from "@/lib/share/metadata";
 import type { EventSnapshot, PublicMessage } from "@/lib/types";
 
@@ -37,14 +38,17 @@ const message: PublicMessage = {
 describe("share copy", () => {
   it("writes the live message post from real remaining time", () => {
     expect(remainClause(live.endsAt, live.serverNow)).toBe("6 hours remain");
+    expect(closesInClause(live.endsAt, live.serverNow)).toBe("The Wall closes in 6 hours");
     const payload = sharePayloadForMessage({ event: live, message });
     expect(payload.text).toBe(
       [
-        "I'm Message #004291 on The Wall.",
-        "6 hours remain.",
-        "Find me before the internet loses its chance to speak.",
+        "“I hope we were trying.”",
+        "Message #004291 on The Wall №001.",
+        "The Wall closes in 6 hours.",
       ].join("\n"),
     );
+    expect(payload.title).toBe("“I hope we were trying.”");
+    expect(payload.text).not.toMatch(/find me|get your message seen|one dollar/i);
     expect(payload.path).toBe("/message/4291");
     expect(payload.url).toContain("/message/4291");
   });
@@ -55,28 +59,46 @@ describe("share copy", () => {
       event: frozen,
       message: { ...message, finalRank: 4 },
     });
+    expect(payload.text).toContain("“I hope we were trying.”");
+    expect(payload.text).toContain("Message #004291 on The Wall №001.");
     expect(payload.text).toContain("Final rank #4.");
-    expect(payload.text).not.toMatch(/hours remain/i);
+    expect(payload.text).not.toMatch(/hours remain|closes in/i);
   });
 
   it("uses the real sentence count on event posts", () => {
     const payload = sharePayloadForEvent(live, "/wall");
-    expect(payload.text).toContain("18 sentences");
+    expect(payload.text).toContain("18 people spoke");
     expect(payload.text).not.toMatch(/thousands|millions|viral/i);
     const empty = sharePayloadForEvent({ ...live, totalMessages: 0 });
-    expect(empty.text).toContain("No sentences yet");
+    expect(empty.text).toContain("No one has spoken yet");
+    expect(empty.text).toContain("THE WALL HAS JUST OPENED.");
+    expect(empty.text).toContain("YOU COULD BE ONE OF THE FIRST 100 VOICES.");
+    expect(payload.text).not.toMatch(/one dollar|tagline|advertise/i);
+  });
+
+  it("shares a winner as the sentence that won, not a product pitch", () => {
+    const payload = sharePayloadForWinner({
+      editionNumber: 1,
+      publicNumber: 4291,
+      text: "Call your mother.",
+      reactionCount: 19284,
+    });
+    expect(payload.text).toContain("“Call your mother.”");
+    expect(payload.text).toContain("Message #004291 on The Wall №001 won.");
+    expect(payload.text).toContain("19,284 🔥");
+    expect(payload.text).not.toMatch(/find me|one dollar|get your message seen/i);
   });
 });
 
 describe("share links", () => {
   it("builds X, Telegram, and Reddit intents around the canonical URL", () => {
     const url = "http://localhost:3000/message/4291";
-    const text = "I'm Message #004291 on The Wall.";
+    const text = "“I hope we were trying.”";
     expect(xShareUrl(text, url)).toContain("twitter.com/intent/tweet");
     expect(xShareUrl(text, url)).toContain(encodeURIComponent(url));
     expect(telegramShareUrl(url, text)).toContain("t.me/share/url");
-    expect(redditShareUrl(url, "#004291 — THE WALL")).toContain("reddit.com/submit");
-    expect(redditShareUrl(url, "#004291 — THE WALL")).not.toContain("utm_");
+    expect(redditShareUrl(url, "THE WALL №001 / MESSAGE #004291")).toContain("reddit.com/submit");
+    expect(redditShareUrl(url, "THE WALL №001 / MESSAGE #004291")).not.toContain("utm_");
   });
 
   it("only oEmbeds public Wall URLs", () => {
@@ -84,9 +106,15 @@ describe("share links", () => {
     expect(parseShareableUrl("http://localhost:3000/archive/001/4291")?.pathname).toBe("/archive/001/4291");
     expect(parseShareableUrl("http://localhost:3000/records")?.pathname).toBe("/records");
     expect(parseShareableUrl("http://localhost:3000/wall")?.pathname).toBe("/wall");
+    expect(parseShareableUrl("http://localhost:3000/open")?.pathname).toBe("/open");
+    expect(parseShareableUrl("http://localhost:3000/watch")?.pathname).toBe("/watch");
+    expect(parseShareableUrl("http://localhost:3000/how-it-works")?.pathname).toBe("/how-it-works");
     expect(parseShareableUrl("http://evil.example/message/4291")).toBeNull();
     expect(parseShareableUrl("http://localhost:3000/admin")).toBeNull();
     expect(parseShareableUrl("http://localhost:3000/certificate/secret-token")).toBeNull();
+    expect(parseShareableUrl("http://localhost:3000/message/4291/certificate")?.pathname).toBe(
+      "/message/4291/certificate",
+    );
   });
 });
 
@@ -103,7 +131,7 @@ describe("creative compositions", () => {
   it("puts live countdown and real totals on the countdown graphic", () => {
     const copy = composeCreative({ kind: "countdown", event: live });
     expect(copy.title).toContain("06:00:00");
-    expect(copy.foot).toContain("18 sentences");
+    expect(copy.foot).toContain("18 people");
     expect(copy.foot).toContain("401");
   });
 
@@ -114,15 +142,54 @@ describe("creative compositions", () => {
     const blank = composeCreative({ kind: "milestone", event: { ...live, totalMessages: 0 } });
     expect(blank.title).toMatch(/blank/i);
     expect(blank.title).not.toMatch(/\d{2,}/);
+    const first = composeCreative({
+      kind: "milestone",
+      event: live,
+      milestone: parseMilestoneQuery({ mark: "1" })!,
+    });
+    expect(first.title).toBe("MESSAGE #000001");
+    expect(first.body).toBe("THE FIRST SENTENCE.");
+    expect(() =>
+      composeCreative({
+        kind: "milestone",
+        event: live,
+        milestone: parseMilestoneQuery({ mark: "10000" })!,
+      }),
+    ).toThrow(/not reached/i);
+    const spoken = sharePayloadForMilestone({
+      event: { ...live, totalMessages: 10_000 },
+      milestone: parseMilestoneQuery({ mark: "10000" })!,
+    });
+    expect(spoken.text).toContain("MESSAGE #010000");
+    expect(spoken.text).toContain("10,000 PEOPLE HAVE SPOKEN.");
+    expect(spoken.path).toBe("/message/10000");
   });
 
   it("message and certificate cards use the real number and fire count", () => {
     const card = composeCreative({ kind: "message", event: live, message });
-    expect(card.title).toBe("#004291");
+    expect(card.kicker).toBe("THE WALL №001");
+    expect(card.brand).toBe("THE WALL");
+    expect(card.edition).toBe("№001");
+    expect(card.title).toBe("MESSAGE #004291");
     expect(card.body).toContain("I hope we were trying.");
     expect(card.foot).toContain("12");
+    expect(card.reactions).toContain("12");
+    expect(card.status).toBe("LIVE");
+    expect(card.clock).toBe("06:00:00 REMAINING");
+    expect(cardClockLine(live)).toBe("06:00:00 REMAINING");
+    expect(JSON.stringify(card)).not.toMatch(/wallet|0x|wall key|user[_ ]?id|transaction|intent/i);
+    const archived = composeCreative({
+      kind: "message",
+      event: { ...live, phase: "archived" },
+      message,
+    });
+    expect(archived.status).toBe("SEALED");
+    expect(archived.clock).toBe("SEALED — WALL №001");
+    expect(archived.clock).not.toMatch(/remaining/i);
+    expect(cardClockLine({ ...live, phase: "finalizing" })).toBe("CLOSED — WALL №001");
     const cert = composeCreative({ kind: "certificate", event: live, message });
-    expect(cert.kicker).toBe("CERTIFICATE");
+    expect(cert.kicker).toBe("THE WALL №001");
+    expect(cert.title).toBe("MESSAGE #004291");
     expect(cert.foot).toMatch(/pending finalization/i);
     const ranked = composeCreative({
       kind: "certificate",
@@ -136,6 +203,16 @@ describe("creative compositions", () => {
     expect(creativeImageUrl({ kind: "message", number: 4291 })).toContain("/api/creatives");
     expect(creativeImageUrl({ kind: "message", number: 4291 })).toContain("number=4291");
     expect(creativeImageUrl({ kind: "message", number: 4291 })).not.toContain("utm");
+    expect(creativeImagePath({ kind: "message", number: 4, edition: 1 })).toBe(
+      "/api/creatives?kind=message&ratio=1200x630&number=4&edition=1",
+    );
+    expect(creativeImagePath({ kind: "message", number: 4 })).not.toMatch(/^https?:/);
+    expect(messageNumberFromSharePath("/message/4291")).toBe(4291);
+    expect(messageNumberFromSharePath("/archive/001/4291")).toBe(4291);
+    expect(editionNumberFromSharePath("/archive/001/4291")).toBe(1);
+    expect(editionNumberFromSharePath("/message/4291")).toBeNull();
+    expect(messageNumberFromSharePath("/wall")).toBeNull();
+    expect(messageNumberFromSharePath("/certificate/secret")).toBeNull();
   });
 });
 
@@ -148,14 +225,15 @@ describe("Open Graph metadata", () => {
       ]),
     );
     expect(meta.twitter).toEqual(expect.objectContaining({ card: "summary_large_image" }));
-    expect(String(meta.description)).toContain("18 sentences");
+    expect(String(meta.description)).toContain("18 people spoke");
     expect(meta.alternates?.types?.["application/json+oembed"]).toContain("/api/oembed");
   });
 
   it("describes a message with remaining time, not fabricated engagement", () => {
     const meta = publicMessageMetadata({ event: live, message });
     expect(meta.openGraph?.title).toContain("#004291");
-    expect(String(meta.description)).toContain("6 hours remain");
+    expect(String(meta.description)).toContain("The Wall closes in 6 hours");
+    expect(String(meta.description)).not.toMatch(/find me|get your message seen|one dollar/i);
     expect(String(meta.description)).not.toMatch(/going viral|millions of views/i);
     expect(ogCopyForMessage({ event: live, message }).description).toContain("I hope we were trying.");
   });
@@ -164,6 +242,9 @@ describe("Open Graph metadata", () => {
 describe("remaining language", () => {
   it("floors hours instead of rounding up", () => {
     expect(remainClause("2026-08-13T18:00:00.000Z", "2026-08-13T12:01:00.000Z")).toBe("5 hours remain");
+    expect(closesInClause("2026-08-13T18:00:00.000Z", "2026-08-13T12:01:00.000Z")).toBe(
+      "The Wall closes in 5 hours",
+    );
     expect(untilOpenClause("2026-08-13T18:00:00.000Z", "2026-08-13T17:00:00.000Z")).toBe(
       "The Wall opens in 1 hour",
     );

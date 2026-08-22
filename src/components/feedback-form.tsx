@@ -46,14 +46,16 @@ export function FeedbackForm() {
 
   return (
     <section id="feedback" className="mx-auto max-w-3xl px-4 pb-28 sm:px-6">
-      <p className="kicker">Write to the stewards</p>
+      <p className="kicker">Send a note</p>
       <h2 className="section-title mt-4">Tell us if the stone is wrong.</h2>
       <p className="lede mt-4 max-w-xl">
-        This is not a sentence on the Wall. Stewards read it. The public does not.
+        This is not a sentence on the Wall. We read it. The public does not.
         No name required.
       </p>
       {status === "ok" ? (
-        <p className="mt-8 text-sm text-mist">Received. Thank you.</p>
+        <p className="mt-8 text-sm text-mist" role="status">
+          Received. Thank you.
+        </p>
       ) : (
         <form onSubmit={(event) => void submit(event)} className="mt-8 max-w-md space-y-4">
           <label className="block">
@@ -70,15 +72,18 @@ export function FeedbackForm() {
               ))}
             </select>
           </label>
-          <label className="block">
+          <label className="block" htmlFor="feedback-note">
             <span className="kicker">Your note</span>
             <textarea
+              id="feedback-note"
               required
               minLength={8}
               maxLength={800}
               rows={5}
               value={body}
               onChange={(event) => setBody(event.target.value)}
+              aria-invalid={status === "err"}
+              aria-describedby={recovery ? "feedback-error" : undefined}
               className="field mt-2 w-full"
               placeholder="The clock jumped. I could not pay. The type is too small."
             />
@@ -97,7 +102,7 @@ export function FeedbackForm() {
             </span>
           </label>
           {recovery ? (
-            <p className="text-sm text-blood" role="alert">
+            <p id="feedback-error" className="text-sm text-blood" role="alert">
               {recovery}
             </p>
           ) : null}

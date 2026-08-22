@@ -1,8 +1,9 @@
+import { archiveBodyOf, serializeCanonicalArchive } from "@/lib/archive/canonical";
 import { loadCanonicalArchive, loadSealedEdition } from "@/lib/data/editions";
 import { jsonError } from "@/lib/http";
 import { parseEdition } from "@/lib/utils";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 3600;
 
 type Props = { params: Promise<{ edition: string }> };
 
@@ -15,11 +16,12 @@ export async function GET(_request: Request, { params }: Props) {
     const event = await loadSealedEdition(editionNumber);
     const archive = await loadCanonicalArchive(event);
     const pad = String(editionNumber).padStart(3, "0");
-    return new Response(JSON.stringify(archive, null, 2), {
+    return new Response(serializeCanonicalArchive(archiveBodyOf(archive)), {
       headers: {
         "Content-Type": "application/json; charset=utf-8",
         "Content-Disposition": `attachment; filename="the-wall-${pad}.json"`,
         "Cache-Control": "public, max-age=3600",
+        "X-Archive-Hash": archive.archiveHash,
       },
     });
   } catch (error) {

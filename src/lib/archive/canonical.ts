@@ -5,6 +5,38 @@ import { recordsFromMessages } from "@/lib/archive/records";
 
 export const ARCHIVE_SCHEMA = "thewall.archive.v1";
 
+export const CANONICAL_MESSAGE_KEYS = [
+  "finalRank",
+  "isRemoved",
+  "publicNumber",
+  "publishedAt",
+  "reactionCount",
+  "text",
+] as const;
+
+/** Fields that must never appear in the sealed public dataset. */
+export const FORBIDDEN_ARCHIVE_KEYS = [
+  "wallet",
+  "walletAddress",
+  "claimKey",
+  "claimToken",
+  "ownershipHash",
+  "ownershipToken",
+  "wallKey",
+  "ip",
+  "ipAddress",
+  "userId",
+  "user_id",
+  "sessionId",
+  "moderationNote",
+  "moderationReason",
+  "internalNote",
+  "paymentId",
+  "paymentTx",
+  "transactionHash",
+  "treasuryAddress",
+] as const;
+
 export type CanonicalMessage = {
   publicNumber: number;
   text: string;
@@ -66,15 +98,26 @@ export function merkleRoot(leaves: string[]): string {
   return level[0]!;
 }
 
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+function sortKeysDeep(value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  const obj = value as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(obj).sort((a, b) => a.localeCompare(b))) {
+    out[key] = sortKeysDeep(obj[key]);
   }
-  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
-    a.localeCompare(b),
-  );
-  return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(",")}}`;
+  return out;
+}
+
+/** Exact public bytes that the archive fingerprint hashes. */
+export function serializeCanonicalArchive(body: CanonicalArchive): string {
+  return `${JSON.stringify(sortKeysDeep(body), null, 2)}\n`;
+}
+
+export function archiveBodyOf(sealed: SealedArchive): CanonicalArchive {
+  return Object.fromEntries(
+    Object.entries(sealed).filter(([key]) => key !== "archiveHash"),
+  ) as CanonicalArchive;
 }
 
 export function toCanonicalMessages(messages: PublicMessage[]): CanonicalMessage[] {
@@ -121,6 +164,6 @@ export function buildCanonicalArchive(input: {
   };
   return {
     ...body,
-    archiveHash: sha256Hex(stableStringify(body)),
+    archiveHash: sha256Hex(serializeCanonicalArchive(body)),
   };
 }

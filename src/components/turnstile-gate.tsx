@@ -10,9 +10,10 @@ export type ChallengeStatus = "idle" | "ready" | "failed" | "expired" | "blocked
 type Props = {
   onToken: (token: string | null) => void;
   disabled?: boolean;
+  purpose?: "publish" | "react";
 };
 
-export function TurnstileGate({ onToken, disabled }: Props) {
+export function TurnstileGate({ onToken, disabled, purpose = "publish" }: Props) {
   const siteKey = turnstileSiteKey();
   const scheme = useThemeScheme();
   const [status, setStatus] = useState<ChallengeStatus>(siteKey ? "idle" : "missing");
@@ -27,7 +28,9 @@ export function TurnstileGate({ onToken, disabled }: Props) {
   if (!siteKey) {
     return (
       <p className="text-sm text-mist" role="status">
-        Verification is unavailable, so publishing is paused. You can still read the wall.
+        {purpose === "react"
+          ? "This browser needs a check before more 🔥. You can keep reading the wall."
+          : "Verification is unavailable, so publishing is paused. You can still read the wall."}
       </p>
     );
   }
@@ -82,7 +85,9 @@ export function TurnstileGate({ onToken, disabled }: Props) {
       ) : null}
       {status === "blocked" ? (
         <p className="mt-3 text-sm text-mist" role="status">
-          This browser blocked the verification widget. Publishing needs it; reading does not.
+          {purpose === "react"
+            ? "This browser blocked the verification widget. You can keep reading the wall."
+            : "This browser blocked the verification widget. Publishing needs it; reading does not."}
         </p>
       ) : null}
     </div>

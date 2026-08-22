@@ -82,7 +82,7 @@ export function SimulationBar() {
           ) : null}
         </p>
         <Link href="/admin" className="btn-ghost min-h-9 px-2 text-[0.65rem] tracking-[0.16em]">
-          Configure in stewardship
+          Simulation controls
         </Link>
       </div>
     </div>

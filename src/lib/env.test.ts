@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { envContract, getNetwork, getPublicEnv } from "@/lib/env";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { envContract, getNetwork, getPublicEnv, isSimulation } from "@/lib/env";
 
 describe("environment blanks", () => {
   it("treats empty and whitespace as missing", () => {
@@ -12,6 +12,8 @@ describe("environment blanks", () => {
     const parsed = envContract.serverSchema.safeParse({
       BASE_RPC_URL: "",
       BASE_BUNDLER_URL: "",
+      ARCHIVE_REPLICA_WEBHOOK_URL: "",
+      ARCHIVE_PROOF_WEBHOOK_URL: "",
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
@@ -68,5 +70,28 @@ describe("public env defaults", () => {
     process.env.NEXT_PUBLIC_SITE_URL = snapshot.site;
     process.env.NEXT_PUBLIC_BASE_NETWORK = snapshot.network;
     process.env.BASE_NETWORK = snapshot.serverNetwork;
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+describe("simulation lock", () => {
+  it("never mocks the Wall once Vercel production has Supabase", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SIMULATE_LIVE", "true");
+    vi.stubEnv("SIMULATE_LIVE", "true");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
+    expect(isSimulation()).toBe(false);
+  });
+
+  it("keeps the local Wall readable on Vercel when Supabase is not configured", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SIMULATE_LIVE", "true");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
+    expect(isSimulation()).toBe(true);
   });
 });

@@ -5,6 +5,13 @@ import { publicErrorPayload } from "@/lib/errors";
 
 const CLIENT_FILES = [
   "src/components/admin/dashboard.tsx",
+  "src/components/admin/shell.tsx",
+  "src/components/admin/wall-desk.tsx",
+  "src/components/admin/moderation-panel.tsx",
+  "src/components/admin/archive-panel.tsx",
+  "src/components/admin/inbox-panel.tsx",
+  "src/components/admin/payments-panel.tsx",
+  "src/components/admin/system-panel.tsx",
   "src/components/admin/login-form.tsx",
   "src/components/admin/confirm-dialog.tsx",
   "src/components/admin/wall-controls.tsx",

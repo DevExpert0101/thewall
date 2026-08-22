@@ -16,7 +16,11 @@ begin
     'message_ownership',
     'reports',
     'moderation_actions',
-    'admin_users'
+    'admin_users',
+    'reaction_signals',
+    'admin_ops_actions',
+    'monument_entries',
+    'monument_state'
   ]) as t
   where not exists (
     select 1 from information_schema.tables
@@ -52,6 +56,16 @@ begin
   if not found then
     raise exception 'missing reactions_unique_user_message';
   end if;
+  perform 1 from pg_indexes
+  where schemaname = 'public' and indexname = 'reactions_user_idempotency_uidx';
+  if not found then
+    raise exception 'missing reactions_user_idempotency_uidx';
+  end if;
+  perform 1 from pg_indexes
+  where schemaname = 'public' and indexname = 'reactions_event_created_message_idx';
+  if not found then
+    raise exception 'missing reactions_event_created_message_idx';
+  end if;
 end;
 $$;
 
@@ -69,7 +83,8 @@ begin
     and c.relname in (
       'events', 'event_counters', 'payment_intents', 'payments', 'messages',
       'reactions', 'message_ownership', 'reports', 'moderation_actions',
-      'admin_users'
+      'admin_users', 'reaction_signals', 'admin_ops_actions',
+      'monument_entries', 'monument_state'
     )
     and c.relrowsecurity is not true;
 

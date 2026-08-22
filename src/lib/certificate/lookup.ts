@@ -88,7 +88,7 @@ export async function lookupCertificate(token: string): Promise<CertificatePaylo
 
   const { data: event } = await db
     .from("events")
-    .select("title, starts_at, edition_number")
+    .select("title, starts_at, edition_number, archive_hash, merkle_root, proof_tx")
     .eq("id", message.event_id)
     .maybeSingle();
 
@@ -109,5 +109,8 @@ export async function lookupCertificate(token: string): Promise<CertificatePaylo
     tagline: ARCHIVAL_TAGLINE,
     editionNumber: event?.edition_number ?? 1,
     totalMessages: counters?.total_messages ?? undefined,
+    archiveHash: event?.archive_hash ?? null,
+    merkleRoot: event?.merkle_root ?? null,
+    proofTx: event?.proof_tx ?? null,
   };
 }

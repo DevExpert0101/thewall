@@ -8,7 +8,9 @@ import {
   hasSupabaseConfig,
   isSimulation,
 } from "@/lib/env";
-import { currentSimulatedEvent } from "@/lib/data/simulation";
+import { currentSimulatedEvent, getSimulatedOps } from "@/lib/data/simulation";
+import { defaultEventOps, parseEventOps, type EventOpsControls } from "@/lib/ops/controls";
+import { EVENT_SNAPSHOT_TTL_MS, remember } from "@/lib/perf/ttl-cache";
 import { createServiceSupabase } from "@/lib/supabase/admin";
 import type { EventSnapshot } from "@/lib/types";
 
@@ -21,6 +23,10 @@ type EventRow = {
   archived_at: string | null;
   finalized_at: string | null;
   edition_number?: number | null;
+  theme_slug?: string | null;
+  theme_question?: string | null;
+  theme_description?: string | null;
+  monument_entry_id?: string | null;
   archive_hash?: string | null;
   merkle_root?: string | null;
   archive_uri?: string | null;
@@ -28,7 +34,7 @@ type EventRow = {
 };
 
 const EVENT_COLUMNS =
-  "id, slug, title, starts_at, ends_at, archived_at, finalized_at, edition_number, archive_hash, merkle_root, archive_uri, proof_tx";
+  "id, slug, title, starts_at, ends_at, archived_at, finalized_at, edition_number, theme_slug, theme_question, theme_description, archive_hash, merkle_root, archive_uri, proof_tx";
 
 const finalizeInflight = new Map<string, Promise<EventRow>>();
 
@@ -61,7 +67,7 @@ export async function getEventBySlug(
     finalizedAt: event.finalized_at,
   });
 
-  if (options.finalize !== false && phase === "finalizing" && !event.finalized_at) {
+  if (options.finalize === true && phase === "finalizing" && !event.finalized_at) {
     const pending = finalizeInflight.get(event.id);
     const work =
       pending ??
@@ -146,6 +152,9 @@ async function snapshotFromSlug(slug: string, finalize: boolean): Promise<EventS
     network: getNetwork(),
     priceUsdc: PRICE_USDC,
     editionNumber: event.edition_number ?? 1,
+    themeSlug: event.theme_slug ?? null,
+    themeQuestion: event.theme_question ?? null,
+    themeDescription: event.theme_description ?? null,
     archiveHash: event.archive_hash ?? null,
     merkleRoot: event.merkle_root ?? null,
     archiveUri: event.archive_uri ?? null,
@@ -177,15 +186,46 @@ export async function getEventByEdition(
   return getEventBySlug(event.slug, options);
 }
 
-export function loadEventSnapshot(slug: string, finalize = true) {
+export function loadEventSnapshot(slug: string, finalize = false) {
   return snapshotFromSlug(slug, finalize);
 }
 
-/** Per-request dedupe for metadata + page + nested loads. */
-export const getEventSnapshot = cache((slug: string) => snapshotFromSlug(slug, true));
+/** Per-request dedupe, plus a short isolate TTL so viral polls share one snapshot. */
+export const getEventSnapshot = cache((slug: string) => {
+  if (isSimulation() || !hasSupabaseConfig()) {
+    return snapshotFromSlug(slug, false);
+  }
+  return remember(`event:${slug}`, EVENT_SNAPSHOT_TTL_MS, () => snapshotFromSlug(slug, false));
+});
 
 export function eventSlug(): string {
   return process.env.NEXT_PUBLIC_EVENT_SLUG ?? "the-wall";
+}
+
+/** Kill switches. Not cached — emergency pauses must apply on the next write. */
+export async function getEventOps(): Promise<EventOpsControls> {
+  if (isSimulation() || !hasSupabaseConfig()) {
+    return getSimulatedOps();
+  }
+  try {
+    const db = createServiceSupabase();
+    const slug = await resolveOpenEventSlug(eventSlug());
+    const { data } = await db
+      .from("events")
+      .select("configuration")
+      .eq("slug", slug)
+      .maybeSingle();
+    return parseEventOps(data?.configuration);
+  } catch {
+    return defaultEventOps();
+  }
+}
+
+export async function readEventConfiguration(eventId: string): Promise<unknown> {
+  if (isSimulation() || !hasSupabaseConfig()) return { ops: getSimulatedOps() };
+  const db = createServiceSupabase();
+  const { data } = await db.from("events").select("configuration").eq("id", eventId).maybeSingle();
+  return data?.configuration ?? {};
 }
 
 export function cacheForPhase(phase: EventSnapshot["phase"]): string {
@@ -198,5 +238,12 @@ export function cacheForPhase(phase: EventSnapshot["phase"]): string {
   return "public, s-maxage=15, stale-while-revalidate=30";
 }
 
-/** Pulse URLs are per-viewer; do not fill the shared CDN cache. */
+/** Per-viewer count sync. Unique `ids` — do not put this on the shared CDN. */
 export const PULSE_CACHE_CONTROL = "private, max-age=2, must-revalidate";
+
+/** Shared wall beat: totals + latest number. Same URL for every reader. */
+export const BEAT_CACHE_CONTROL = "public, s-maxage=2, stale-while-revalidate=8";
+
+export function pulseCacheControl(hasIds: boolean): string {
+  return hasIds ? PULSE_CACHE_CONTROL : BEAT_CACHE_CONTROL;
+}

@@ -39,6 +39,7 @@ const url = siteUrl();
 
 export const viewport = {
   themeColor: colors.void,
+  interactiveWidget: "resizes-content" as const,
 };
 
 export const metadata: Metadata = {

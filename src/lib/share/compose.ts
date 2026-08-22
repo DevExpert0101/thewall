@@ -1,7 +1,22 @@
 import type { EventSnapshot, PublicMessage } from "@/lib/types";
 import { remainClause, remainingLabel, untilOpenClause } from "@/lib/event/remaining";
-import { APP_NAME, TAGLINE } from "@/lib/constants";
-import { formatCount, formatPublicNumber } from "@/lib/utils";
+import { FIRST_HUNDRED_LINE, FIRST_VOICES, JUST_OPENED_TITLE, firstHundredLine } from "@/lib/launch/cold-start";
+import { APP_NAME } from "@/lib/constants";
+import {
+  hasReachedMilestone,
+  milestoneChorus,
+  milestoneHeadline,
+  type Milestone,
+} from "@/lib/milestones/engine";
+import {
+  editionNumberOf,
+  formatCount,
+  formatEditionNumber,
+  formatMessageMark,
+  formatPublicNumber,
+  formatWallEdition,
+  formatWallShort,
+} from "@/lib/utils";
 
 export const CREATIVE_SIZES = {
   "1200x630": { width: 1200, height: 630 },
@@ -19,6 +34,12 @@ export type CreativeCopy = {
   body: string;
   foot: string;
   number?: string;
+  brand?: string;
+  edition?: string;
+  status?: string;
+  clock?: string;
+  reactions?: string;
+  invite?: string;
 };
 
 const RATIO_ALIASES: Record<string, CreativeRatio> = {
@@ -37,44 +58,96 @@ export function resolveCreativeRatio(raw: string | null | undefined): CreativeRa
   return RATIO_ALIASES[raw] ?? null;
 }
 
+export function cardStatusLine(phase: EventSnapshot["phase"]): string {
+  if (phase === "live") return "LIVE";
+  if (phase === "finalizing") return "CLOSED";
+  if (phase === "archived") return "SEALED";
+  return "NOT YET OPEN";
+}
+
+/** Live clock or sealed/closed mark. Never invents remaining time after close. */
+export function cardClockLine(
+  event: Pick<EventSnapshot, "phase" | "endsAt" | "serverNow" | "editionNumber">,
+): string {
+  const short = formatWallShort(editionNumberOf(event));
+  if (event.phase === "live") {
+    return remainingLabel(event.endsAt, event.serverNow);
+  }
+  if (event.phase === "archived") {
+    return `SEALED — ${short}`;
+  }
+  return `CLOSED — ${short}`;
+}
+
 export function composeCreative(input: {
   kind: CreativeKind;
   event: EventSnapshot;
   message?: PublicMessage;
+  milestone?: Milestone;
 }): CreativeCopy {
-  const { kind, event, message } = input;
+  const { kind, event, message, milestone } = input;
 
   if (kind === "message" || kind === "certificate") {
     if (!message) {
       throw new Error("Message required");
     }
+    const edition = editionNumberOf(event);
     const number = formatPublicNumber(message.publicNumber);
+    const mark = formatMessageMark(message.publicNumber);
+    const wall = formatWallEdition(edition);
     const quote = message.isRemoved ? message.text : `“${message.text}”`;
     const fires = `${formatCount(message.reactionCount)} 🔥`;
     if (kind === "certificate") {
       const rank = message.finalRank ? `Final rank #${message.finalRank}` : "Rank pending finalization";
       return {
         kind,
-        kicker: "CERTIFICATE",
-        title: `MESSAGE ${number}`,
+        kicker: wall,
+        title: mark,
         body: quote,
-        foot: `${rank}  ·  ${fires}  ·  ${TAGLINE}`,
+        foot: `${rank}  ·  ${fires}`,
         number,
       };
     }
-    const clock =
-      event.phase === "live" ? remainClause(event.endsAt, event.serverNow) : "The Wall is frozen";
+    const status = cardStatusLine(event.phase);
+    const clock = cardClockLine(event);
     return {
       kind,
-      kicker: APP_NAME,
-      title: number,
+      brand: APP_NAME,
+      edition: formatEditionNumber(edition),
+      kicker: wall,
+      title: mark,
       body: quote,
-      foot: `${fires}   ${clock}`,
+      status,
+      clock,
+      reactions: fires,
+      foot: `${fires}  ·  ${status}  ·  ${clock}`,
       number,
     };
   }
 
   if (kind === "milestone") {
+    if (milestone) {
+      const reached = hasReachedMilestone(
+        { messages: event.totalMessages, reactions: event.totalReactions },
+        milestone,
+      );
+      if (!reached) {
+        throw new Error("Milestone not reached");
+      }
+      const edition = editionNumberOf(event);
+      return {
+        kind,
+        brand: APP_NAME,
+        edition: formatEditionNumber(edition),
+        kicker: formatWallEdition(edition),
+        title: milestoneHeadline(milestone),
+        body: milestoneChorus(milestone),
+        status: cardStatusLine(event.phase),
+        clock: cardClockLine(event),
+        foot: `${cardStatusLine(event.phase)}  ·  ${cardClockLine(event)}`,
+        number: milestone.kind === "message" ? formatPublicNumber(milestone.value) : undefined,
+      };
+    }
     const count = event.totalMessages;
     const title =
       count === 0
@@ -86,14 +159,14 @@ export function composeCreative(input: {
       event.phase === "upcoming"
         ? untilOpenClause(event.startsAt, event.serverNow) + "."
         : event.phase === "live"
-          ? `${remainClause(event.endsAt, event.serverNow)}. Anyone can still write.`
-          : "The Wall is frozen. It does not reopen.";
+          ? `${remainClause(event.endsAt, event.serverNow)}.`
+          : "The Wall is sealed. It does not reopen.";
     return {
       kind,
       kicker: APP_NAME,
       title,
       body,
-      foot: TAGLINE,
+      foot: cardClockLine(event),
     };
   }
 
@@ -106,24 +179,36 @@ export function composeCreative(input: {
       kind: "countdown",
       kicker: APP_NAME,
       title: untilOpenClause(event.startsAt, event.serverNow).toUpperCase(),
-      body: "WHAT WILL YOU LEAVE BEHIND?",
+      body: "The stone is still blank.",
       foot: clock,
     };
   }
   if (event.phase === "live") {
+    if (event.totalMessages === 0) {
+      return {
+        kind: "countdown",
+        kicker: APP_NAME,
+        title: JUST_OPENED_TITLE,
+        body: FIRST_HUNDRED_LINE,
+        foot: clock,
+      };
+    }
     return {
       kind: "countdown",
       kicker: APP_NAME,
       title: clock.replace(" REMAINING", "") + " LEFT",
-      body: "WHAT WILL YOU LEAVE BEHIND?",
-      foot: `${formatCount(event.totalMessages)} sentences  ·  ${formatCount(event.totalReactions)} 🔥`,
+      body:
+        event.totalMessages < FIRST_VOICES
+          ? firstHundredLine(event.totalMessages).toUpperCase()
+          : `${formatCount(event.totalMessages)} people spoke.`,
+      foot: `${formatCount(event.totalMessages)} people  ·  ${formatCount(event.totalReactions)} 🔥`,
     };
   }
   return {
     kind: "countdown",
     kicker: APP_NAME,
-    title: "THE WALL IS FROZEN",
-    body: `${formatCount(event.totalMessages)} sentences remain on the stone.`,
-    foot: TAGLINE,
+    title: "THE WALL IS SEALED",
+    body: `${formatCount(event.totalMessages)} people spoke.`,
+    foot: `${formatCount(event.totalMessages)} people  ·  ${formatCount(event.totalReactions)} 🔥`,
   };
 }

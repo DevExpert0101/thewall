@@ -1,18 +1,19 @@
 import { NextRequest } from "next/server";
 import { withSupabaseSession } from "@/lib/supabase/proxy-client";
-import { contentSecurityPolicy } from "@/lib/security/csp";
+import { contentSecurityPolicy, createCspNonce, pageScriptHashes } from "@/lib/security/csp";
 
-function requestNonce(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
+let cachedPageHashes: string[] | null = null;
+
+async function pageCsp(nonce: string): Promise<string> {
+  const isDev = process.env.NODE_ENV !== "production";
+  if (isDev) return contentSecurityPolicy(nonce, true);
+  cachedPageHashes ??= await pageScriptHashes();
+  return contentSecurityPolicy(nonce, false, cachedPageHashes);
 }
 
 export async function proxy(request: NextRequest) {
-  const nonce = requestNonce();
-  const csp = contentSecurityPolicy(nonce, process.env.NODE_ENV !== "production");
+  const nonce = createCspNonce();
+  const csp = await pageCsp(nonce);
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
@@ -54,8 +55,9 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
+/** HTML + cookie refresh only. Public read APIs and OG images skip Edge entirely. */
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon$|api/|.*opengraph-image|.*twitter-image|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

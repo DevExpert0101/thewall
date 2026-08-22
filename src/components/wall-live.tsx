@@ -2,50 +2,82 @@
 
 import * as Tabs from "@radix-ui/react-tabs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ClosedMonument } from "@/components/closed-monument";
+import { ClosingCeremony } from "@/components/closing-ceremony";
+import { LivingWall } from "@/components/living-wall";
+import { VictorRace } from "@/components/victor-race";
+import { FailureRecovery } from "@/components/failure-recovery";
 import { MessageCard } from "@/components/message-card";
+import { MilestoneFeed } from "@/components/milestone-feed";
+import { MilestoneToast } from "@/components/milestone-toast";
+import { RandomMode } from "@/components/random-mode";
 import { PublishDialog } from "@/components/publish-dialog";
 import { PrimaryCta } from "@/components/primary-cta";
 import { Countdown } from "@/components/countdown";
+import { SharePanel } from "@/components/share-panel";
 import { WallSkeleton } from "@/components/wall-skeleton";
-import { formatCount, parsePublicNumber, wallTitle } from "@/lib/utils";
+import { rarestCelebration, reachedMilestones } from "@/lib/milestones/engine";
+import { SUPPORTING_COPY } from "@/lib/constants";
+import { useSyncedNow } from "@/lib/event/clock";
+import {
+  eventPresentation,
+  formatEventInstant,
+  publishUrgencyLine,
+  remainingMsFrom,
+  remainingNotice,
+} from "@/lib/event/remaining";
+import { FIRST_HUNDRED_LINE, JUST_OPENED_TITLE, WAITING_PATH } from "@/lib/launch/cold-start";
+import { sharePayloadForEvent } from "@/lib/share/copy";
+import { editionNumberOf, formatCount, parsePublicNumber, wallTitle } from "@/lib/utils";
+import type { MonumentEntry, VictorRaceLeader } from "@/lib/monument/types";
 import type { EventSnapshot, PublicMessage } from "@/lib/types";
 import type { MessageSort } from "@/lib/constants";
-import { WALL_PAGE_SIZE, WALL_PULSE_MS } from "@/lib/wall/constants";
+import { isDocumentHidden } from "@/lib/ui/visibility";
+import { WALL_COUNT_PULSE_MS, WALL_MIX_PAGE_SIZE, WALL_PAGE_SIZE, WALL_PULSE_MS, WALL_SURFACE_MAX } from "@/lib/wall/constants";
+import { discoveryMethodsFor, discoveryTabs } from "@/lib/wall/discovery";
 import {
   applyOptimisticReaction,
   applyReactionCounts,
-  arrivalFromRealtime,
   capFeed,
   feedSortForPhase,
   mergeArrival,
 } from "@/lib/wall/feed";
-import { realtimeChannelName, realtimeEventFilter } from "@/lib/wall/realtime";
-import { isEventClosed } from "@/lib/event/state";
-
-const TABS: { id: MessageSort; label: string; hint: string }[] = [
-  { id: "trending", label: "Trending", hint: "Heat over time" },
-  { id: "hot", label: "Most 🔥", hint: "All-time fire" },
-  { id: "hour", label: "This hour", hint: "Last 60 minutes" },
-  { id: "new", label: "New", hint: "Just arrived" },
-  { id: "random", label: "Random", hint: "A wander" },
-];
+import { spectatorRankLabel, type SpectatorLane } from "@/lib/wall/mix";
+import { SHOW_ANOTHER_HUMAN } from "@/lib/wall/random";
+import { isEventClosed, publicPhaseLabel, reconcilePublicPhase } from "@/lib/event/state";
 
 type Props = {
   event: EventSnapshot;
   initial: PublicMessage[];
+  initialSurface?: PublicMessage[];
   initialCursor?: string | null;
+  initialLanes?: Record<string, SpectatorLane>;
+  initialLeaders?: VictorRaceLeader[];
+  monument?: MonumentEntry | null;
 };
 
-export function WallLive({ event, initial, initialCursor = null }: Props) {
+export function WallLive({
+  event,
+  initial,
+  initialSurface,
+  initialCursor = null,
+  initialLanes = {},
+  initialLeaders = [],
+  monument = null,
+}: Props) {
   const [phase, setPhase] = useState(event.phase);
-  const [sort, setSort] = useState<MessageSort>("trending");
+  const [sort, setSort] = useState<MessageSort>(() =>
+    isEventClosed(event.phase) ? "hot" : "rising",
+  );
   const [messages, setMessages] = useState(initial);
+  const [surface, setSurface] = useState(initialSurface ?? initial);
+  const [surfaceOpen, setSurfaceOpen] = useState(false);
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [query, setQuery] = useState("");
   const [draftQuery, setDraftQuery] = useState("");
   const [hideRemoved, setHideRemoved] = useState(false);
-  const [salt, setSalt] = useState("wall");
   const [open, setOpen] = useState(false);
+  const [randomOpen, setRandomOpen] = useState(false);
   const [frozen, setFrozen] = useState(isEventClosed(event.phase));
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -54,31 +86,55 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
     messages: event.totalMessages,
     reactions: event.totalReactions,
   });
+  const verifiedTotals = useRef({
+    messages: event.totalMessages,
+    reactions: event.totalReactions,
+  });
+  const [marks, setMarks] = useState(() =>
+    reachedMilestones({ messages: event.totalMessages, reactions: event.totalReactions }),
+  );
+  const [celebration, setCelebration] = useState<ReturnType<typeof rarestCelebration>>(null);
   const [pendingArrivals, setPendingArrivals] = useState<PublicMessage[]>([]);
+  const [liveLink, setLiveLink] = useState<"ok" | "paused">("ok");
+  const pulseFails = useRef(0);
   const [freshIds, setFreshIds] = useState<string[]>([]);
+  const [lanes, setLanes] = useState<Record<string, SpectatorLane>>(initialLanes);
+  const [leaders, setLeaders] = useState<VictorRaceLeader[]>(initialLeaders);
+  const [serverNow, setServerNow] = useState(event.serverNow);
+  const [clock, setClock] = useState({
+    startsAt: event.startsAt,
+    endsAt: event.endsAt,
+    editionNumber: event.editionNumber,
+  });
+  const now = useSyncedNow(serverNow);
   const requestId = useRef(0);
   const sentinelRef = useRef<HTMLButtonElement | null>(null);
   const sortRef = useRef(sort);
   const queryRef = useRef(query);
   const messagesRef = useRef(messages);
   const phaseRef = useRef(phase);
+  const remainingRef = useRef(0);
 
   useEffect(() => {
     sortRef.current = sort;
     queryRef.current = query;
     messagesRef.current = messages;
     phaseRef.current = phase;
+    remainingRef.current = remainingMsFrom(
+      phase === "upcoming" ? clock.startsAt : clock.endsAt,
+      now,
+    );
   });
 
   const searching = Boolean(query.trim());
   const visible = hideRemoved ? messages.filter((message) => !message.isRemoved) : messages;
+  const surfaceVisible = hideRemoved ? surface.filter((message) => !message.isRemoved) : surface;
 
   const load = useCallback(
     async (input: {
       nextSort: MessageSort;
       q?: string;
       nextCursor?: string | null;
-      nextSalt?: string;
       append?: boolean;
     }) => {
       const id = ++requestId.current;
@@ -86,13 +142,15 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
       else setLoading(true);
       setError(null);
       try {
+        const mix = input.nextSort === "rising" && !input.q;
         const params = new URLSearchParams({
           sort: input.nextSort,
-          limit: String(WALL_PAGE_SIZE),
+          limit: String(mix ? WALL_MIX_PAGE_SIZE : WALL_PAGE_SIZE),
         });
         if (input.q) params.set("q", input.q);
         if (input.nextCursor) params.set("cursor", input.nextCursor);
-        if (input.nextSort === "random") params.set("salt", input.nextSalt ?? salt);
+        if (input.nextSort === "random") params.set("salt", event.id);
+        if (mix) params.set("mix", "1");
         const res = await fetch(`/api/messages?${params.toString()}`);
         const data = await res.json();
         if (id !== requestId.current) return;
@@ -101,6 +159,8 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
           return;
         }
         const page = (data.messages ?? []) as PublicMessage[];
+        const nextLanes = (data.lanes ?? {}) as Record<string, SpectatorLane>;
+        setLanes((current) => (input.append ? { ...current, ...nextLanes } : nextLanes));
         setMessages((current) =>
           capFeed(
             input.append
@@ -119,39 +179,173 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
         }
       }
     },
-    [salt],
+    [event.id],
   );
 
-  const applyRemotePhase = useCallback((next: EventSnapshot["phase"]) => {
+  const applyVerifiedTotals = useCallback((incoming: { messages?: number; reactions?: number }) => {
+    const next = {
+      messages: incoming.messages ?? verifiedTotals.current.messages,
+      reactions: incoming.reactions ?? verifiedTotals.current.reactions,
+    };
+    const crossed = rarestCelebration(verifiedTotals.current, next);
+    verifiedTotals.current = next;
+    setTotals(next);
+    setMarks(reachedMilestones(next));
+    if (crossed) setCelebration(crossed);
+  }, []);
+
+  const applyRemotePhase = useCallback((
+    next: EventSnapshot["phase"],
+    remoteNow?: string,
+    remote?: { startsAt?: string; endsAt?: string; editionNumber?: number },
+  ) => {
+    const nextStarts = remote?.startsAt ?? clock.startsAt;
+    const nextEnds = remote?.endsAt ?? clock.endsAt;
+    const nextEdition = remote?.editionNumber ?? clock.editionNumber;
+    const resolved = reconcilePublicPhase({
+      reported: next,
+      endsAt: nextEnds,
+      now: remoteNow ?? serverNow,
+      previous: phaseRef.current,
+      startsAt: nextStarts,
+      previousStartsAt: clock.startsAt,
+      editionNumber: nextEdition,
+      previousEditionNumber: clock.editionNumber,
+    });
+    if (
+      nextStarts !== clock.startsAt ||
+      nextEnds !== clock.endsAt ||
+      nextEdition !== clock.editionNumber
+    ) {
+      setClock({ startsAt: nextStarts, endsAt: nextEnds, editionNumber: nextEdition });
+    }
     const current = phaseRef.current;
-    if (current === next) return;
-    setPhase(next);
-    const closed = isEventClosed(next);
+    if (current === resolved) return;
+    setPhase(resolved);
+    const closed = isEventClosed(resolved);
     setFrozen(closed);
-    if (closed && (sortRef.current === "trending" || sortRef.current === "hour")) {
+    if (closed) setPendingArrivals([]);
+    if (closed && sortRef.current === "rising") {
       setSort("hot");
       void load({ nextSort: "hot" });
     }
-  }, [load]);
+  }, [clock.editionNumber, clock.endsAt, clock.startsAt, load, serverNow]);
 
-  const pulse = useCallback(async () => {
-    const list = messagesRef.current;
-    if (list.length === 0) {
-      try {
-        const res = await fetch("/api/event");
-        const data = await res.json();
-        if (res.ok) {
-          setTotals((current) => ({
-            messages: data.totalMessages ?? current.messages,
-            reactions: data.totalReactions ?? current.reactions,
-          }));
-          if (data.phase) applyRemotePhase(data.phase as EventSnapshot["phase"]);
-        }
-      } catch {
-        // keep last totals
+  const applyBeat = useCallback(
+    (data: {
+      totalMessages?: number;
+      totalReactions?: number;
+      latestPublicNumber?: number;
+      counts?: Record<string, number>;
+      serverNow?: string;
+      phase?: EventSnapshot["phase"];
+      startsAt?: string;
+      endsAt?: string;
+      editionNumber?: number;
+    }) => {
+      if (typeof data.serverNow === "string") setServerNow(data.serverNow);
+      if (data.phase) {
+        applyRemotePhase(data.phase, data.serverNow, {
+          startsAt: data.startsAt,
+          endsAt: data.endsAt,
+          editionNumber: data.editionNumber,
+        });
       }
-      return;
+      if (remainingRef.current <= 0) return;
+      if (typeof data.totalMessages === "number" && typeof data.totalReactions === "number") {
+        applyVerifiedTotals({ messages: data.totalMessages, reactions: data.totalReactions });
+      }
+      if (data.counts) {
+        setMessages((current) => applyReactionCounts(current, data.counts as Record<string, number>));
+        setSurface((current) => applyReactionCounts(current, data.counts as Record<string, number>));
+      }
+    },
+    [applyRemotePhase, applyVerifiedTotals],
+  );
+
+  const ingestArrivals = useCallback((incoming: PublicMessage[]) => {
+    if (remainingRef.current <= 0) return;
+    const fresh = incoming.filter((row) => row.eventId === event.id || event.id === "local");
+    if (fresh.length === 0) return;
+    setSurface((list) => fresh.reduce((acc, row) => mergeArrival(acc, row, WALL_SURFACE_MAX), list));
+    if ((sortRef.current === "new" || sortRef.current === "rising") && !queryRef.current) {
+      setMessages((list) => fresh.reduce((acc, row) => mergeArrival(acc, row), list));
+      setFreshIds((ids) => [...fresh.map((row) => row.id), ...ids].slice(0, 12));
+      if (sortRef.current === "rising") {
+        setLanes((current) => {
+          const next = { ...current };
+          for (const row of fresh) next[row.id] = "fresh";
+          return next;
+        });
+      }
+    } else {
+      setPendingArrivals((list) => {
+        const seen = new Set(list.map((row) => row.id));
+        const next = fresh.filter((row) => !seen.has(row.id));
+        return next.length === 0 ? list : [...next, ...list].slice(0, 24);
+      });
     }
+  }, [event.id]);
+
+  const beat = useCallback(async () => {
+    if (isDocumentHidden() || remainingRef.current <= 0) return;
+    const params = new URLSearchParams();
+    if (event.id !== "local") params.set("eventId", event.id);
+    try {
+      const res = await fetch(`/api/messages/pulse?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) {
+        pulseFails.current += 1;
+        if (pulseFails.current >= 2) setLiveLink("paused");
+        return;
+      }
+      pulseFails.current = 0;
+      setLiveLink("ok");
+      applyBeat(data);
+      if (remainingRef.current > 0) {
+        try {
+          const hot = await fetch("/api/messages?sort=hot&limit=3");
+          const body = await hot.json();
+          if (hot.ok && Array.isArray(body.messages)) {
+            setLeaders(
+              (body.messages as PublicMessage[]).map((message) => ({
+                publicNumber: message.publicNumber,
+                text: message.text,
+                isRemoved: message.isRemoved,
+                reactionCount: message.reactionCount,
+                publishedAt: message.publishedAt,
+              })),
+            );
+          }
+        } catch {
+          // keep the last good race
+        }
+      }
+      const latest =
+        typeof data.latestPublicNumber === "number" ? data.latestPublicNumber : data.totalMessages;
+      const maxLocal = messagesRef.current.reduce(
+        (max, message) => Math.max(max, message.publicNumber),
+        0,
+      );
+      if (typeof latest === "number" && latest > maxLocal) {
+        const feed = await fetch(`/api/messages?sort=new&limit=${WALL_PAGE_SIZE}`);
+        const body = await feed.json();
+        if (feed.ok && Array.isArray(body.messages)) {
+          ingestArrivals(
+            (body.messages as PublicMessage[]).filter((row) => row.publicNumber > maxLocal),
+          );
+        }
+      }
+    } catch {
+      pulseFails.current += 1;
+      if (pulseFails.current >= 2) setLiveLink("paused");
+    }
+  }, [applyBeat, event.id, ingestArrivals]);
+
+  const syncCounts = useCallback(async () => {
+    if (isDocumentHidden()) return;
+    const list = messagesRef.current;
+    if (list.length === 0) return;
     const ids = list.slice(0, WALL_PAGE_SIZE * 4).map((message) => message.id);
     const params = new URLSearchParams({ ids: ids.join(",") });
     if (event.id !== "local") params.set("eventId", event.id);
@@ -159,92 +353,62 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
       const res = await fetch(`/api/messages/pulse?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) return;
-      setTotals((current) => ({
-        messages: data.totalMessages ?? current.messages,
-        reactions: data.totalReactions ?? current.reactions,
-      }));
-      if (data.counts) {
-        setMessages((current) => applyReactionCounts(current, data.counts as Record<string, number>));
-      }
-      if (data.phase) applyRemotePhase(data.phase as EventSnapshot["phase"]);
+      applyBeat(data);
     } catch {
-      // keep the last good feed
+      // keep the last good counts
     }
-  }, [applyRemotePhase, event.id]);
+  }, [applyBeat, event.id]);
 
+  const remainingForWrite = remainingMsFrom(
+    phase === "upcoming" ? clock.startsAt : clock.endsAt,
+    now,
+  );
+  const displayPhase =
+    phase === "live" && remainingForWrite <= 0 ? "finalizing" : phase;
   const cardEvent = useMemo(
-    () => ({ phase, endsAt: event.endsAt, serverNow: event.serverNow }),
-    [phase, event.endsAt, event.serverNow],
+    () => ({ phase: displayPhase, endsAt: clock.endsAt, serverNow, editionNumber: clock.editionNumber }),
+    [clock.editionNumber, clock.endsAt, displayPhase, serverNow],
   );
   const onReacted = useCallback((id: string, count: number) => {
     setMessages((current) => applyOptimisticReaction(current, id, count));
+    setSurface((current) => applyOptimisticReaction(current, id, count));
     setTotals((current) => ({ ...current, reactions: current.reactions + 1 }));
   }, []);
 
   useEffect(() => {
     if (phase === "archived") return;
+    const closed = isEventClosed(phase);
+    let countAt = 0;
     const id = window.setInterval(() => {
-      void pulse();
-    }, WALL_PULSE_MS);
-    return () => window.clearInterval(id);
-  }, [phase, pulse]);
-
-  useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || phase !== "live") return;
-    let cancelled = false;
-    let dispose: (() => void) | undefined;
-    void import("@/lib/supabase/browser").then(({ createRealtimeSupabase }) => {
-      if (cancelled) return;
-      const client = createRealtimeSupabase();
-      const channel = client
-        .channel(realtimeChannelName(event.id))
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "public_message_events",
-            filter: realtimeEventFilter(event.id),
-          },
-          (payload) => {
-            const row = payload.new as {
-              id: string;
-              event_id: string;
-              public_number: number;
-              text: string;
-              reaction_count: number;
-              published_at: string;
-            };
-            if (row.event_id !== event.id) return;
-            const incoming = arrivalFromRealtime(row);
-            setTotals((current) => ({
-              ...current,
-              messages: current.messages + 1,
-            }));
-            if (sortRef.current === "new" && !queryRef.current) {
-              setMessages((list) => mergeArrival(list, incoming));
-              setFreshIds((ids) => [incoming.id, ...ids].slice(0, 12));
-            } else {
-              setPendingArrivals((list) =>
-                list.some((row) => row.id === incoming.id) ? list : [incoming, ...list].slice(0, 24),
-              );
-            }
-          },
-        )
-        .subscribe();
-      if (cancelled) {
-        void client.removeChannel(channel);
+      if (isDocumentHidden()) return;
+      if (isEventClosed(phaseRef.current)) {
+        void fetch("/api/event")
+          .then((res) => res.json())
+          .then((data) => {
+            if (typeof data.serverNow === "string") setServerNow(data.serverNow);
+            if (data.phase) applyRemotePhase(data.phase as EventSnapshot["phase"], data.serverNow);
+          })
+          .catch(() => undefined);
         return;
       }
-      dispose = () => {
-        void client.removeChannel(channel);
-      };
-    });
-    return () => {
-      cancelled = true;
-      dispose?.();
+      void beat();
+      countAt += WALL_PULSE_MS;
+      if (countAt >= WALL_COUNT_PULSE_MS) {
+        countAt = 0;
+        void syncCounts();
+      }
+    }, closed ? 30_000 : WALL_PULSE_MS);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible" || isEventClosed(phaseRef.current)) return;
+      void beat();
+      void syncCounts();
     };
-  }, [phase, event.id]);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [phase, beat, syncCounts, applyRemotePhase]);
 
   useEffect(() => {
     const node = sentinelRef.current;
@@ -262,12 +426,17 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
   }, [cursor, searching, loading, loadingMore, sort, query, load]);
 
   function changeSort(next: MessageSort) {
+    if (next === "random") {
+      setRandomOpen(true);
+      return;
+    }
     const resolved = feedSortForPhase(phase, next);
     setSort(resolved);
     setQuery("");
     setDraftQuery("");
     setPendingArrivals([]);
-    void load({ nextSort: resolved, nextSalt: salt });
+    setLanes({});
+    void load({ nextSort: resolved });
   }
 
   function submitSearch(event: React.FormEvent) {
@@ -292,76 +461,116 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
     void load({ nextSort: "new" });
   }
 
-  const target = phase === "upcoming" ? event.startsAt : event.endsAt;
+  const target = phase === "upcoming" ? clock.startsAt : clock.endsAt;
+  const remaining = remainingMsFrom(target, now);
+  const presentation = eventPresentation(phase, remaining);
+  const writable = phase === "live" && remaining > 0;
+  const notice = remainingNotice(presentation, remaining);
+  const urgency = publishUrgencyLine(presentation);
   const label =
     phase === "upcoming" ? "Until launch" : phase === "live" ? "Remaining" : "Closed";
-  const awaitingStart =
-    phase === "upcoming" &&
-    Date.parse(event.startsAt) - Date.parse(event.serverNow) > 7 * 24 * 60 * 60 * 1000;
 
   const emptyCopy = emptyMessage({
     phase,
     sort,
     searching,
     query,
+    totalMessages: event.totalMessages,
   });
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 pb-28 sm:px-6">
-      <div className="wall-chrome sticky top-14 z-30 -mx-4 px-4 py-3 sm:top-16 sm:-mx-6 sm:px-6">
+    <div
+      className="mx-auto w-full max-w-6xl px-4 pb-[calc(6.75rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-28"
+      data-presentation={presentation}
+    >
+      {liveLink === "paused" ? (
+        <div className="mb-4">
+          <FailureRecovery
+            title="Live updates paused"
+            body="The Wall is still here. You can keep reading and searching. New arrivals will resume when the connection returns."
+            actions={[
+              {
+                label: "Try live updates again",
+                kind: "line",
+                onClick: () => {
+                  pulseFails.current = 0;
+                  setLiveLink("ok");
+                  void beat();
+                },
+              },
+            ]}
+          />
+        </div>
+      ) : null}
+      <div
+        className="wall-chrome sticky z-30 -mx-4 px-4 py-3 sm:-mx-6 sm:px-6"
+        data-presentation={presentation}
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <p className="truncate font-display text-lg text-paper sm:text-xl">
               {wallTitle(event)}
             </p>
-            {phase === "live" ? (
+            {writable ? (
               <span className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-ember">
                 <span className="live-dot" aria-hidden="true" />
-                Live
+                {notice ? (
+                  <>
+                    <span className="sr-only">Live</span>
+                    <span aria-hidden="true">{notice}</span>
+                  </>
+                ) : (
+                  "Live"
+                )}
               </span>
             ) : (
               <span className="kicker">
-                {phase}
+                {publicPhaseLabel(phase === "live" && remaining <= 0 ? "finalizing" : phase)}
               </span>
             )}
-            {awaitingStart ? (
-              <span className="kicker">Not yet open</span>
-            ) : (
-              <Countdown
-                targetIso={target}
-                serverNow={event.serverNow}
-                label={label}
-                phase={phase}
-                size="bar"
-                onZero={() => {
-                  if (phase === "upcoming") applyRemotePhase("live");
-                  if (phase === "live") applyRemotePhase("finalizing");
-                }}
-              />
-            )}
+            <Countdown
+              targetIso={target}
+              serverNow={serverNow}
+              nowMs={now}
+              label={label}
+              phase={phase}
+              size="bar"
+              onZero={() => {
+                if (phase === "upcoming") applyRemotePhase("live");
+                if (phase === "live") applyRemotePhase("finalizing");
+              }}
+            />
           </div>
           <p className="font-mono text-[0.7rem] tracking-[0.08em] text-bronze sm:text-xs">
-            {formatCount(totals.messages)} sentences · {formatCount(totals.reactions)} 🔥
+            {phase === "upcoming"
+              ? `Opens ${formatEventInstant(clock.startsAt)}`
+              : `${formatCount(totals.messages)} voices · ${formatCount(totals.reactions)} 🔥`}
             {event.id === "local" ? " · Simulation" : ""}
           </p>
         </div>
+        <MilestoneFeed marks={marks} phase={displayPhase === "finalizing" ? "finalizing" : phase} />
       </div>
 
-      {frozen ? (
-        <div className="empty-monument my-6 py-10">
-          <p className="font-display text-2xl sm:text-3xl">The Wall is frozen.</p>
-          <p className="mt-2 text-sm text-ash">
-            {phase === "finalizing"
-              ? "Publishing and 🔥 have stopped. Final ranks are being carved."
-              : "No further sentences. Publishing and 🔥 have stopped."}
-          </p>
-          <a href="/archive" className="btn btn-primary mt-6">
-            Enter the archive
-          </a>
+      {frozen || (phase === "live" && remaining <= 0) ? (
+        <div className="empty-monument event-freeze my-6 py-10">
+          <ClosedMonument
+            editionNumber={clock.editionNumber ?? editionNumberOf(event)}
+            totalMessages={totals.messages}
+            sealed={phase === "archived"}
+          />
+          {phase === "archived" ? <ClosingCeremony entry={monument} /> : null}
         </div>
       ) : null}
 
-      {pendingArrivals.length > 0 ? (
+      {writable ? <VictorRace leaders={leaders} live /> : null}
+
+      {writable && urgency ? (
+        <p className="mt-4 text-center font-mono text-[0.7rem] uppercase tracking-[0.18em] text-ember">
+          {urgency}
+        </p>
+      ) : null}
+
+      {writable && pendingArrivals.length > 0 ? (
         <button
           type="button"
           onClick={revealArrivals}
@@ -377,7 +586,7 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
         <form className="block flex-1" onSubmit={submitSearch}>
           <label className="block">
             <span className="kicker">
-              Search by number or words
+              Find a sentence
             </span>
             <div className="mt-2 flex flex-wrap gap-2">
               <input
@@ -387,6 +596,7 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
                 inputMode="search"
                 autoComplete="off"
                 aria-invalid={Boolean(draftQuery.trim().startsWith("#") && !parsePublicNumber(draftQuery))}
+                aria-describedby="wall-search-hint"
                 className="field min-w-[10rem] flex-1 font-mono text-sm"
               />
               <button
@@ -410,12 +620,22 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
               ) : null}
             </div>
           </label>
+          <p id="wall-search-hint" className="sr-only">
+            Search by message number like #004291, or by a phrase from the sentence.
+          </p>
         </form>
-        {phase === "live" ? (
-          <div className="hidden sm:block">
-            <PrimaryCta phase={phase} onPublish={() => setOpen(true)} />
-          </div>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {surfaceVisible.length > 0 ? (
+            <button type="button" className="btn btn-line" onClick={() => setSurfaceOpen(true)}>
+              View the wall
+            </button>
+          ) : null}
+          {writable ? (
+            <div className="hidden sm:block">
+              <PrimaryCta phase="live" onPublish={() => setOpen(true)} />
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-4">
@@ -428,19 +648,6 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
           />
           Hide removed
         </label>
-        {sort === "random" ? (
-          <button
-            type="button"
-            className="btn-ghost text-ember hover:text-paper"
-            onClick={() => {
-              const next = crypto.randomUUID();
-              setSalt(next);
-              void load({ nextSort: "random", nextSalt: next });
-            }}
-          >
-            Shuffle
-          </button>
-        ) : null}
       </div>
 
       <Tabs.Root
@@ -452,7 +659,7 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
           aria-label="Wall filters"
           className="wall-tabs"
         >
-          {TABS.filter((tab) => !frozen || (tab.id !== "trending" && tab.id !== "hour")).map((tab) => (
+          {discoveryTabs(!frozen).map((tab) => (
             <Tabs.Trigger
               key={tab.id}
               value={tab.id}
@@ -463,28 +670,51 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
             </Tabs.Trigger>
           ))}
         </Tabs.List>
+        <details className="mt-4 max-w-2xl text-sm text-ash">
+          <summary className="kicker cursor-pointer text-bronze hover:text-paper">
+            How these lists are ranked
+          </summary>
+          <p className="mt-3 text-mist">
+            Everyone looking at this Wall sees the same lists. Nothing is personalized.
+          </p>
+          <ul className="mt-3 space-y-3">
+            {discoveryMethodsFor(!frozen).map((method) => (
+              <li key={method.id}>
+                <p className="font-display text-paper">{method.title}</p>
+                <p className="mt-1">{method.body}</p>
+              </li>
+            ))}
+          </ul>
+        </details>
 
         <Tabs.Content value={sort} className="mt-4" aria-busy={loading}>
           {error ? (
-            <div className="border border-blood/40 bg-blood/10 p-5" role="alert">
-              <p className="text-sm text-paper">{error}</p>
-              <button
-                type="button"
-                className="btn-ghost mt-3 text-ember hover:text-paper"
-                onClick={() => void load({ nextSort: sort, q: query || undefined, nextCursor: cursor, append: messages.length > 0 })}
-              >
-                Try again
-              </button>
-            </div>
+            <FailureRecovery
+              title="The Wall is temporarily unreachable"
+              body={error}
+              actions={[
+                {
+                  label: "Try again",
+                  kind: "line",
+                  onClick: () =>
+                    void load({
+                      nextSort: sort,
+                      q: query || undefined,
+                      nextCursor: cursor,
+                      append: messages.length > 0,
+                    }),
+                },
+              ]}
+            />
           ) : null}
 
-          {loading && messages.length === 0 ? <WallSkeleton /> : null}
+          {loading && messages.length === 0 ? <WallSkeleton count={9} /> : null}
 
           {!loading && !error && visible.length === 0 ? (
             <div className="empty-monument">
               <p className="font-display text-3xl sm:text-4xl">{emptyCopy.title}</p>
               <p className="lede mx-auto mt-4 max-w-md">{emptyCopy.body}</p>
-              {phase === "live" && !searching ? (
+              {writable && !searching ? (
                 <button
                   type="button"
                   className="btn btn-primary mt-8"
@@ -492,6 +722,23 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
                 >
                   Be the first sentence
                 </button>
+              ) : null}
+              {phase === "upcoming" && !searching ? (
+                <div className="mx-auto mt-8 max-w-md">
+                  <p className="mb-4 text-xs uppercase tracking-[0.18em] text-bronze">
+                    Opens {formatEventInstant(clock.startsAt)}
+                  </p>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+                    <PrimaryCta phase="upcoming" />
+                  </div>
+                  <div className="mt-6">
+                    <SharePanel
+                      payload={sharePayloadForEvent({ ...event, phase: "upcoming", serverNow }, WAITING_PATH)}
+                      via="event"
+                      primaryLabel="Share the opening"
+                    />
+                  </div>
+                </div>
               ) : null}
             </div>
           ) : null}
@@ -502,20 +749,17 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
                 <MessageCard
                   key={message.id}
                   message={message}
-                  phase={phase}
+                  phase={displayPhase}
                   dense
                   fresh={freshIds.includes(message.id)}
-                  featured={sort === "trending" && !searching && index === 0}
+                  featured={false}
                   event={cardEvent}
-                  rankLabel={
-                    freshIds.includes(message.id)
-                      ? "Just arrived"
-                      : sort === "trending" && index < 3
-                        ? "Trending"
-                        : sort === "hot" && index === 0
-                          ? "Most 🔥"
-                          : undefined
-                  }
+                  rankLabel={spectatorRankLabel(
+                    lanes[message.id],
+                    sort,
+                    index,
+                    freshIds.includes(message.id),
+                  )}
                   onReacted={onReacted}
                 />
               ))}
@@ -533,21 +777,67 @@ export function WallLive({ event, initial, initialCursor = null }: Props) {
               {loadingMore ? "Loading more…" : "Load more sentences"}
             </button>
           ) : null}
+
+          {visible.length > 0 && !searching && !randomOpen ? (
+            <button
+              type="button"
+              onClick={() => setRandomOpen(true)}
+              className="btn-ghost mt-4 w-full min-h-11 text-bronze hover:text-paper"
+            >
+              {SHOW_ANOTHER_HUMAN}
+            </button>
+          ) : null}
         </Tabs.Content>
       </Tabs.Root>
 
-      {phase === "live" ? (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-void/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
-          <PrimaryCta phase={phase} onPublish={() => setOpen(true)} className="w-full" />
+      {surfaceOpen ? (
+        <div className="living-overlay" role="dialog" aria-label="The Wall">
+          <div className="living-overlay-bar">
+            <button type="button" className="btn btn-line" onClick={() => setSurfaceOpen(false)}>
+              Back to sentences
+            </button>
+          </div>
+          <div className="living-stage">
+            <LivingWall
+              messages={surfaceVisible}
+              phase={displayPhase}
+              event={cardEvent}
+              onReacted={onReacted}
+            />
+          </div>
         </div>
+      ) : null}
+
+      {writable ? (
+        <div className="wall-dock fixed inset-x-0 bottom-0 z-40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
+          <PrimaryCta phase="live" onPublish={() => setOpen(true)} className="w-full" />
+        </div>
+      ) : null}
+
+      {randomOpen ? (
+        <RandomMode event={event} variant="overlay" onClose={() => setRandomOpen(false)} />
+      ) : null}
+
+      {celebration ? (
+        <MilestoneToast
+          milestone={celebration}
+          event={{
+            phase: displayPhase,
+            endsAt: clock.endsAt,
+            serverNow,
+            editionNumber: clock.editionNumber ?? editionNumberOf(event),
+          }}
+          onDismiss={() => setCelebration(null)}
+        />
       ) : null}
 
       <PublishDialog
         open={open}
         onOpenChange={setOpen}
-        enabled={phase === "live"}
-        endsAt={event.endsAt}
-        serverNow={event.serverNow}
+        enabled={writable}
+        endsAt={clock.endsAt}
+        serverNow={serverNow}
+        editionNumber={clock.editionNumber ?? editionNumberOf(event)}
       />
     </div>
   );
@@ -558,11 +848,18 @@ function emptyMessage(input: {
   sort: MessageSort;
   searching: boolean;
   query: string;
+  totalMessages: number;
 }): { title: string; body: string } {
   if (input.phase === "upcoming") {
     return {
       title: "Blank stone.",
-      body: "The Wall has not opened. A steward starts the day from the stewardship console.",
+      body: SUPPORTING_COPY,
+    };
+  }
+  if (input.phase === "live" && input.totalMessages === 0 && !input.searching) {
+    return {
+      title: JUST_OPENED_TITLE,
+      body: FIRST_HUNDRED_LINE,
     };
   }
   if (input.searching) {
@@ -570,20 +867,37 @@ function emptyMessage(input: {
     return {
       title: n ? `No ${String(n).padStart(6, "0")}.` : "No match.",
       body: n
-        ? "That number is not on this Wall. Try another, or wander the feeds."
+        ? "That number is not on this Wall. Try another, or wander the lists."
         : "No sentence on this Wall contains those words.",
     };
   }
-  if (input.sort === "hour") {
+  if (input.sort === "rising") {
     return {
       title: "Quiet hour.",
-      body: "No 🔥 in the last sixty minutes. The rest of the wall is still burning.",
+      body: "No 🔥 in the last sixty minutes. Lifetime totals do not count here.",
     };
+  }
+  if (input.sort === "gems") {
+    return {
+      title: "No hidden gems yet.",
+      body: "A gem needs at least 3 🔥 and must sit outside the loudest 20%.",
+    };
+  }
+  if (input.sort === "final") {
+    return input.phase === "live"
+      ? {
+          title: "The final hour has not begun.",
+          body: "Sentences published in the last 60 minutes before this Wall closes will appear here.",
+        }
+      : {
+          title: "No last-hour sentences.",
+          body: "Nobody published in the final 60 minutes of this Wall.",
+        };
   }
   if (input.sort === "random") {
     return {
       title: "Nothing to wander.",
-      body: "The Wall is empty. Anyone can read. One USDC writes.",
+      body: "The Wall is empty. Anyone can read. One dollar writes.",
     };
   }
   return {

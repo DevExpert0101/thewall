@@ -13,8 +13,8 @@ export function createBrowserSupabase() {
 }
 
 /**
- * Realtime subscriber for public_message_events.
- * Does not persist a session, so browsing never writes auth to storage.
+ * Optional Realtime client. Wall readers must not use this — they poll the
+ * public beat. Does not persist a session, so browsing never writes auth.
  */
 export function createRealtimeSupabase() {
   const { url, anonKey } = requireSupabaseAnonConfig();

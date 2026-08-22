@@ -1,15 +1,16 @@
-import type { MessageSort } from "@/lib/constants";
+import { resolveMessageSort, type AcceptedSort, type MessageSort } from "@/lib/constants";
 import type { EventPhase } from "@/lib/event/state";
 import { isEventClosed } from "@/lib/event/state";
 import type { PublicMessage } from "@/lib/types";
 import { WALL_MAX_RENDERED } from "@/lib/wall/constants";
 
-/** After close, time-varying sorts would drift. Lock them to stable Most 🔥. */
-export function feedSortForPhase(phase: EventPhase, sort: MessageSort): MessageSort {
-  if (isEventClosed(phase) && (sort === "trending" || sort === "hour")) {
+/** After close, a rolling 60-minute Rising list would drift. Lock it to Most 🔥. */
+export function feedSortForPhase(phase: EventPhase, sort: AcceptedSort | MessageSort): MessageSort {
+  const resolved = resolveMessageSort(sort);
+  if (isEventClosed(phase) && resolved === "rising") {
     return "hot";
   }
-  return sort;
+  return resolved;
 }
 
 export function offsetFromCursor(cursor?: string): number {
@@ -39,6 +40,7 @@ export function capFeed(
 export function mergeArrival(
   current: PublicMessage[],
   incoming: PublicMessage,
+  max = WALL_MAX_RENDERED,
 ): PublicMessage[] {
   if (
     current.some(
@@ -47,7 +49,7 @@ export function mergeArrival(
   ) {
     return current;
   }
-  return capFeed([incoming, ...current]);
+  return capFeed([incoming, ...current], max);
 }
 
 export function applyReactionCounts(
@@ -76,7 +78,7 @@ export function applyOptimisticReaction(
   );
 }
 
-/** Variable-height masonry stays under WALL_MAX_RENDERED; windowing would fight CSS columns. */
+/** Cap the live grid. Windowing would fight variable-height cards. */
 export function shouldVirtualize(renderedCount: number): boolean {
   return renderedCount > WALL_MAX_RENDERED;
 }

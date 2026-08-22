@@ -19,6 +19,12 @@ describe("critical UI", () => {
     expect(screen.getByText(/enter the archive/i)).toBeInTheDocument();
   });
 
+  it("does not disclose the archive while the wall is under review", () => {
+    render(<PrimaryCta phase="finalizing" />);
+    expect(screen.getByText(/the wall has closed/i)).toBeInTheDocument();
+    expect(screen.queryByText(/enter the archive/i)).not.toBeInTheDocument();
+  });
+
   it("exposes FAQ as accessible accordion", () => {
     render(<Faq />);
     expect(screen.getByText(/what is the wall/i)).toBeInTheDocument();

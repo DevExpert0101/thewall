@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { ARCHIVAL_REMOVAL_TEXT } from "@/lib/constants";
 import { colors } from "@/lib/design/tokens";
-import { formatCount, formatEditionNumber, formatPublicNumber, formatUtcTime } from "@/lib/utils";
+import { formatCount, formatObjectIdentity, formatUtcTime, formatWallEdition } from "@/lib/utils";
 import type { CertificatePayload } from "@/lib/types";
 import { CREATIVE_SIZES, type CreativeRatio } from "@/lib/share/compose";
 
@@ -44,12 +44,10 @@ export function renderCertificateImage(
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", fontSize: 18, letterSpacing: 12, color: colors.bronze }}>
-            CERTIFICATE
+            PUBLIC CERTIFICATE
           </div>
           <div style={{ display: "flex", fontSize: 16, letterSpacing: 6, color: colors.ash }}>
-            {data.editionNumber
-              ? `${data.eventTitle} ${formatEditionNumber(data.editionNumber)}`
-              : data.eventTitle}
+            {data.editionNumber ? formatWallEdition(data.editionNumber) : data.eventTitle}
           </div>
           <div style={{ display: "flex", fontSize: 16, color: colors.mist }}>{data.eventDate}</div>
         </div>
@@ -63,7 +61,7 @@ export function renderCertificateImage(
               color: colors.bronze,
             }}
           >
-            {`MESSAGE ${formatPublicNumber(data.publicNumber)}`}
+            {formatObjectIdentity(data.publicNumber, data.editionNumber)}
           </div>
           <div style={{ display: "flex", width: 88, height: 1, background: colors.bronze }} />
           <div
@@ -82,8 +80,10 @@ export function renderCertificateImage(
             {`Published ${formatUtcTime(data.publishedAt)}`}
           </div>
         </div>
-        <div style={{ display: "flex", fontSize: 16, letterSpacing: 6, color: colors.bronze }}>
-          {data.tagline}
+        <div style={{ display: "flex", fontSize: 16, letterSpacing: 4, color: colors.bronze }}>
+          {typeof data.totalMessages === "number"
+            ? `${formatCount(data.totalMessages)} people spoke that day. This was one of them.`
+            : formatObjectIdentity(data.publicNumber, data.editionNumber)}
         </div>
       </div>
     ),

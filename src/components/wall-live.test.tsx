@@ -80,6 +80,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -88,11 +89,51 @@ describe("live wall", () => {
     render(<WallLive event={event} initial={[message(4), message(3)]} initialCursor="12" />);
     expect(screen.getByText(/live/i)).toBeInTheDocument();
     expect(screen.getByText(/sentence 4 on the wall/i)).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /trending/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /rising/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /most/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /new/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /random/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /hidden gems/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /final hour/i })).toBeInTheDocument();
+    expect(screen.getByText(/find a sentence/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /find/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /load more sentences/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /view the wall/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /shuffle/i })).not.toBeInTheDocument();
+  });
+
+  it("opens the visual wall from a button and can return to the sentence list", async () => {
+    const user = userEvent.setup();
+    const rising = message(15);
+    const fresh = message(18);
+    const wander = message(3);
+    render(
+      <WallLive
+        event={event}
+        initial={[rising, fresh, wander]}
+        initialLanes={{ [rising.id]: "rising", [fresh.id]: "fresh", [wander.id]: "surprise" }}
+      />,
+    );
+    expect(screen.getByText(/^just in$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^wander$/i)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /the wall/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /view the wall/i }));
+    expect(screen.getByRole("dialog", { name: /the wall/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /sentence 15 on the wall/i })).toHaveAttribute(
+      "href",
+      "/message/15",
+    );
+    await user.click(screen.getByRole("button", { name: /back to sentences/i }));
+    expect(screen.queryByRole("dialog", { name: /the wall/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /rising/i })).toBeInTheDocument();
+  });
+
+  it("opens fullscreen random mode from the random tab", async () => {
+    const user = userEvent.setup();
+    render(<WallLive event={event} initial={[message(4)]} />);
+    await user.click(screen.getByRole("tab", { name: /random/i }));
+    expect(await screen.findByRole("button", { name: /show me another human/i })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /random/i })).toBeInTheDocument();
   });
 
   it("loads the new feed when that filter is chosen", async () => {
@@ -136,6 +177,9 @@ describe("live wall", () => {
     const user = userEvent.setup();
     render(<WallLive event={event} initial={[message(4), message(3)]} initialCursor="12" />);
     await user.click(screen.getByRole("button", { name: /load more sentences/i }));
+    await waitFor(() => {
+      expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("mix=1"))).toBe(true);
+    });
     expect(await screen.findByText(/sentence 6 on the wall/i)).toBeInTheDocument();
     expect(screen.getByText(/sentence 4 on the wall/i)).toBeInTheDocument();
   });
@@ -157,6 +201,28 @@ describe("live wall", () => {
     expect(screen.getByText(/sentence 1 on the wall/i)).toBeInTheDocument();
   });
 
+  it("does not disclose results while the wall is under review", () => {
+    render(
+      <WallLive
+        event={{ ...event, phase: "finalizing", endsAt: "2026-08-13T12:00:00.000Z" }}
+        initial={[message(4)]}
+      />,
+    );
+    expect(screen.getByText(/the wall №001 has closed/i)).toBeInTheDocument();
+    expect(screen.getByText("18 PEOPLE SPOKE.")).toBeInTheDocument();
+    expect(screen.getByText(/no one can add another word/i)).toBeInTheDocument();
+    expect(screen.getByText(/under review/i)).toBeInTheDocument();
+    expect(screen.getByText(/final ranks are not public yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^finalizing$/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /enter the archive/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /leave your mark/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /react with fire/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /rising/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /most/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /hidden gems/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /final hour/i })).toBeInTheDocument();
+  });
+
   it("does not treat an upcoming wall as frozen", () => {
     render(
       <WallLive
@@ -164,9 +230,51 @@ describe("live wall", () => {
         initial={[]}
       />,
     );
-    expect(screen.getByText(/until launch/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/until launch/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/blank stone/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /remind me/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /share the opening/i })).toBeInTheDocument();
     expect(screen.queryByText(/the wall is frozen/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /enter the archive/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /leave your mark/i })).not.toBeInTheDocument();
+  });
+
+  it("ignores a delayed pulse after the clock has closed", async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/messages/pulse") || url.includes("/api/event")) {
+        return json({
+          phase: "live",
+          serverNow: "2026-08-13T12:00:02.000Z",
+          totalMessages: 99,
+          totalReactions: 200,
+          latestPublicNumber: 99,
+          counts: {},
+        });
+      }
+      if (url.includes("/api/messages")) {
+        return json({ messages: [message(99)], nextCursor: null });
+      }
+      return json({ ok: true });
+    });
+    render(
+      <WallLive
+        event={{
+          ...event,
+          phase: "finalizing",
+          endsAt: "2026-08-13T12:00:00.000Z",
+          serverNow: "2026-08-13T12:00:01.000Z",
+        }}
+        initial={[message(4)]}
+      />,
+    );
+    expect(screen.getByText(/sentence 4 on the wall/i)).toBeInTheDocument();
+    expect(screen.getByText("18 PEOPLE SPOKE.")).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(35_000);
+    expect(screen.getByText(/sentence 4 on the wall/i)).toBeInTheDocument();
+    expect(screen.queryByText(/sentence 99 on the wall/i)).not.toBeInTheDocument();
+    expect(screen.getByText("18 PEOPLE SPOKE.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /leave your mark/i })).not.toBeInTheDocument();
   });
 });

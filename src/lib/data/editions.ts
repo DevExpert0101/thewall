@@ -1,5 +1,10 @@
 import { buildCanonicalArchive } from "@/lib/archive/canonical";
-import { allTimeFromEditions, highlightFrom, peakMessagesPerMinute, recordsFromMessages } from "@/lib/archive/records";
+import {
+  allTimeFromEditions,
+  highlightFrom,
+  recordsFromMessages,
+  type ReactionStamp,
+} from "@/lib/archive/records";
 import { getEventByEdition, getEventSnapshot } from "@/lib/data/event";
 import { listMessages } from "@/lib/data/messages";
 import {
@@ -11,6 +16,7 @@ import {
 } from "@/lib/data/simulation";
 import { hasSupabaseConfig, isSimulation } from "@/lib/env";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { remember } from "@/lib/perf/ttl-cache";
 import { createServiceSupabase } from "@/lib/supabase/admin";
 import type {
   AllTimeRecords,
@@ -65,12 +71,15 @@ export async function listSealedEditions(): Promise<EditionSummary[]> {
   if (isSimulation() || !hasSupabaseConfig()) {
     return listSimulatedEditions();
   }
+  return remember("sealed-editions", 60_000, loadSealedEditionsFromDb);
+}
 
+async function loadSealedEditionsFromDb(): Promise<EditionSummary[]> {
   const db = createServiceSupabase();
   const { data: events, error } = await db
     .from("events")
     .select(
-      "id, slug, title, starts_at, ends_at, archived_at, finalized_at, edition_number, archive_hash, merkle_root, archive_uri, proof_tx",
+      "id, slug, title, starts_at, ends_at, archived_at, finalized_at, edition_number, theme_question, archive_hash, merkle_root, archive_uri, proof_tx",
     )
     .or("finalized_at.not.is.null,archived_at.not.is.null")
     .order("edition_number", { ascending: true });
@@ -86,7 +95,7 @@ export async function listSealedEditions(): Promise<EditionSummary[]> {
       archivedAt: row.archived_at,
       finalizedAt: row.finalized_at,
     });
-    return phase === "archived" || phase === "finalizing";
+    return phase === "archived";
   });
   if (sealed.length === 0) return [];
 
@@ -108,6 +117,14 @@ export async function listSealedEditions(): Promise<EditionSummary[]> {
     (winners ?? []).map((row) => [row.event_id as string, row]),
   );
 
+  const { data: monuments } = await db
+    .from("public_monument_entries")
+    .select("event_id, monument_number")
+    .in("event_id", ids);
+  const monumentByEvent = new Map(
+    (monuments ?? []).map((row) => [row.event_id as string, row.monument_number as number]),
+  );
+
   return sealed.map((row) => {
     const counts = counterById.get(row.id);
     return {
@@ -125,6 +142,8 @@ export async function listSealedEditions(): Promise<EditionSummary[]> {
       archiveUri: row.archive_uri ?? null,
       proofTx: row.proof_tx ?? null,
       winning: toHighlight(winnerByEvent.get(row.id) ?? null),
+      monumentNumber: monumentByEvent.get(row.id) ?? null,
+      themeQuestion: row.theme_question ?? null,
     };
   });
 }
@@ -144,7 +163,7 @@ export async function loadSealedEdition(editionNumber: number): Promise<EventSna
 
   const { event } = await getEventByEdition(editionNumber);
   const snapshot = await getEventSnapshot(event.slug);
-  if (snapshot.phase !== "archived" && snapshot.phase !== "finalizing") {
+  if (snapshot.phase !== "archived") {
     throw new AppError(ERROR_CODES.MESSAGE_NOT_FOUND, "Edition not found.", 404);
   }
   return snapshot;
@@ -156,12 +175,48 @@ export async function loadEditionLedger(event: EventSnapshot): Promise<PublicMes
     if (stored) return stored.messages;
     return listSimulatedMessages({ sort: "hot", limit: 10_000, eventId: event.id }).messages;
   }
-  return allPublicMessages(event.id);
+  return remember(`ledger:${event.id}`, 3_600_000, () => allPublicMessages(event.id));
+}
+
+async function loadReactionStamps(eventId: string): Promise<ReactionStamp[] | null> {
+  if (isSimulation() || eventId === "local" || eventId.startsWith("local-") || !hasSupabaseConfig()) {
+    return null;
+  }
+  try {
+    const db = createServiceSupabase();
+    const stamps: ReactionStamp[] = [];
+    const page = 1000;
+    for (let from = 0; from < 2_000_000; from += page) {
+      const { data, error } = await db
+        .from("reactions")
+        .select("message_id, created_at")
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: true })
+        .range(from, from + page - 1);
+      if (error) return null;
+      const rows = data ?? [];
+      for (const row of rows) {
+        stamps.push({ messageId: row.message_id, createdAt: row.created_at });
+      }
+      if (rows.length < page) break;
+    }
+    return stamps;
+  } catch {
+    return null;
+  }
+}
+
+async function cachedReactionStamps(eventId: string): Promise<ReactionStamp[] | null> {
+  return remember(`stamps:${eventId}`, 3_600_000, async () => {
+    const stamps = await loadReactionStamps(eventId);
+    return stamps ?? [];
+  }).then((rows) => (rows.length === 0 ? null : rows));
 }
 
 export async function loadEditionRecords(event: EventSnapshot): Promise<EditionRecords> {
   const messages = await loadEditionLedger(event);
-  return recordsFromMessages(editionNumberOf(event), event, messages);
+  const stamps = await cachedReactionStamps(event.id);
+  return recordsFromMessages(editionNumberOf(event), event, messages, stamps);
 }
 
 export async function loadCanonicalArchive(event: EventSnapshot) {
@@ -172,7 +227,7 @@ export async function loadCanonicalArchive(event: EventSnapshot) {
     }
     return buildCanonicalArchive({ event: frozen.event, messages: frozen.messages });
   }
-  const messages = await allPublicMessages(event.id);
+  const messages = await loadEditionLedger(event);
   const sealed = buildCanonicalArchive({ event, messages });
   if (!event.archiveHash || !event.merkleRoot) {
     try {
@@ -197,52 +252,39 @@ export async function loadAllTimeRecords(): Promise<AllTimeRecords> {
   if (editions.length === 0) return allTimeFromEditions([]);
 
   const peaks = new Map<number, number>();
+  const books: EditionRecords[] = [];
   let mostFire: AllTimeRecords["mostFireOnMessage"] = null;
 
-  if (isSimulation() || !hasSupabaseConfig()) {
-    for (const edition of editions) {
-      const stored = getSimulatedEdition(edition.editionNumber);
-      const messages = stored?.messages ?? [];
-      peaks.set(edition.editionNumber, peakMessagesPerMinute(messages));
-      const top = [...messages].sort((a, b) => b.reactionCount - a.reactionCount)[0];
-      if (top && (!mostFire || top.reactionCount > mostFire.reactionCount)) {
-        mostFire = {
-          editionNumber: edition.editionNumber,
-          publicNumber: top.publicNumber,
-          reactionCount: top.reactionCount,
-        };
-      }
-    }
-    return allTimeFromEditions(editions, { mostFireOnMessage: mostFire, peaks });
-  }
-
-  const db = createServiceSupabase();
-  const { data: hottest } = await db
-    .from("public_messages")
-    .select("event_id, public_number, reaction_count")
-    .in(
-      "event_id",
-      editions.map((edition) => edition.id),
-    )
-    .order("reaction_count", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (hottest) {
-    const edition = editions.find((row) => row.id === hottest.event_id);
-    mostFire = {
-      editionNumber: edition?.editionNumber ?? 1,
-      publicNumber: hottest.public_number,
-      reactionCount: hottest.reaction_count,
-    };
-  }
-
   for (const edition of editions) {
-    const messages = await allPublicMessages(edition.id);
-    peaks.set(edition.editionNumber, peakMessagesPerMinute(messages));
+    const event = await loadSealedEdition(edition.editionNumber).catch(() => null);
+    const stored = getSimulatedEdition(edition.editionNumber);
+    const messages = event
+      ? await loadEditionLedger(event)
+      : stored?.messages ?? [];
+    const stamps = event ? await cachedReactionStamps(event.id) : null;
+    const book = recordsFromMessages(
+      edition.editionNumber,
+      event ?? {
+        startsAt: edition.startsAt,
+        endsAt: edition.endsAt,
+        totalMessages: edition.totalMessages,
+        totalReactions: edition.totalReactions,
+      },
+      messages,
+      stamps,
+    );
+    books.push(book);
+    peaks.set(edition.editionNumber, book.peakMessagesPerMinute);
+    if (book.mostReacted && (!mostFire || book.mostReacted.reactionCount > mostFire.reactionCount)) {
+      mostFire = {
+        editionNumber: edition.editionNumber,
+        publicNumber: book.mostReacted.publicNumber,
+        reactionCount: book.mostReacted.reactionCount,
+      };
+    }
   }
 
-  return allTimeFromEditions(editions, { mostFireOnMessage: mostFire, peaks });
+  return allTimeFromEditions(editions, { mostFireOnMessage: mostFire, peaks, books });
 }
 
 export async function loadEditionMessage(editionNumber: number, publicNumber: number): Promise<PublicMessage> {

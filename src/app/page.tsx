@@ -3,12 +3,15 @@ import { JsonLd } from "@/components/json-ld";
 import { Faq } from "@/components/faq";
 import { FeedbackForm } from "@/components/feedback-form";
 import { LandingHero } from "@/components/landing-hero";
+import { LandingPreviewActions } from "@/components/landing-preview-actions";
 import { MessageCard } from "@/components/message-card";
-import { TAGLINE } from "@/lib/constants";
-import { loadEvent, loadPreview } from "@/lib/data/load";
+import { WitnessPlaque } from "@/components/witness-plaque";
+import { loadEvent, loadLandingWitness, loadLatestPublicWinner } from "@/lib/data/load";
+import { monumentCanvasFromEnv } from "@/lib/monument/canvas";
+import { listMonumentEntries } from "@/lib/monument/store";
 import { publicPageMetadata } from "@/lib/share/metadata";
-import { formatCount, wallTitle } from "@/lib/utils";
 import type { Metadata } from "next";
+import type { PublicMessage } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -19,50 +22,33 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function HomePage() {
   const event = await loadEvent();
-  const preview = await loadPreview(event);
+  const carved = await loadLandingWitness(event);
+  const featured = event.phase === "live" ? (carved[0] ?? null) : null;
+  const shrine = event.phase === "archived" ? await resolveShrine(event) : null;
+  const monument = await listMonumentEntries().catch(() => ({
+    entries: [],
+    sealedCount: 0,
+    capacity: null,
+    canvas: monumentCanvasFromEnv(),
+  }));
 
   return (
     <main>
       <JsonLd event={event} />
-      <LandingHero
-        event={event}
-        inscriptions={preview
-          .filter((message) => !message.isRemoved)
-          .map((message) => ({
-            id: message.id,
-            text: message.text,
-            fires: message.reactionCount,
-          }))}
-      />
+      <LandingHero event={event} featured={featured} monument={monument} />
 
-      <section className="stat-row">
-        <div className="mx-auto grid max-w-6xl grid-cols-3">
-          <Stat label="Sentences" value={formatCount(event.totalMessages)} />
-          <Stat label="Fire" value={formatCount(event.totalReactions)} ember />
-          <Stat
-            label="The clock"
-            value={event.phase === "live" ? "Open" : event.phase === "upcoming" ? "Soon" : "Closed"}
-            live={event.phase === "live"}
-          />
-        </div>
-      </section>
-
-      {preview.length > 0 ? (
+      {carved.length > 0 ? (
         <section className="section-monument">
           <div className="section-head">
             <p className="kicker">On the wall</p>
-            <h2 className="section-title">Sentences already carved</h2>
+            <h2 className="section-title">Already on the stone</h2>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-2">
-            {preview.slice(0, 4).map((message) => (
+            {carved.map((message) => (
               <MessageCard key={message.id} message={message} phase={event.phase} event={event} />
             ))}
           </div>
-          <div className="mt-10">
-            <Link href="/wall" className="btn btn-line">
-              Open the wall
-            </Link>
-          </div>
+          <LandingPreviewActions event={event} />
         </section>
       ) : null}
 
@@ -70,33 +56,55 @@ export default async function HomePage() {
         <div className="section-monument">
           <div className="section-head">
             <p className="kicker">How a sentence stays</p>
-            <h2 className="section-title">Write. Pay. It remains.</h2>
+            <h2 className="section-title">Write. Pay $1. Take your number.</h2>
           </div>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             <Step n="01" title="Write 140 characters" body="One sentence. No name. No profile. No audience to perform for." />
-            <Step n="02" title="Pay one dollar" body="1 USDC on Base, once. The wallet is not your name. Nothing else is sold." />
-            <Step n="03" title="It stays" body="When the clock dies, this Wall is sealed as a numbered edition. Your number is never reused on that day." />
+            <Step n="02" title="Pay one dollar" body="$1, once. No account. The payment is not your name. Nothing else is sold." />
+            <Step n="03" title="Take your number" body="When the clock hits zero, this Wall is sealed. Your number is never reused on that day." />
+          </div>
+          <div className="mt-10">
+            <Link href="/how-it-works" className="btn-ghost kicker hover:text-paper">
+              How it works →
+            </Link>
           </div>
         </div>
       </section>
 
-      <section className="shrine-band">
+      <section className="rite-band">
         <div className="section-monument">
-          <p className="kicker">Permanence</p>
-          <h2 className="permanence-title">
-            A sentence you cannot unwrite, then born as history.
-          </h2>
-          <div className="pay-plaque shrine-plaque mt-12 max-w-lg p-7 sm:p-10">
-            <p className="font-mono text-[0.7rem] tracking-[0.22em] text-bronze">MESSAGE #004291</p>
-            <p className="mt-5 font-display text-2xl leading-snug text-paper sm:text-3xl">
-              “Sold the guitar in March. I still reach for it when a song comes on.”
-            </p>
-            <p className="mt-8 kicker">Final rank · 🔥 · published timestamp</p>
-            <p className="mt-6 text-[0.65rem] uppercase tracking-[0.22em] text-mist">{TAGLINE}</p>
+          <div className="section-head">
+            <p className="kicker">The Monument</p>
+            <h2 className="section-title">The world gets one Wall.</h2>
           </div>
-          <p className="mt-4 text-xs text-ash">Certificate preview — sample composition, not a live statistic.</p>
+          <p className="lede mt-8 max-w-xl">
+            For 24 hours, anyone can leave one anonymous sentence. Thousands may
+            speak. Only one becomes the Victor. Every Victor earns a permanent
+            place in The Monument.
+          </p>
+          <p className="mt-6 font-monument text-sm tracking-[0.16em] text-bronze">
+            ONE WALL. ONE VICTOR. ONE PLACE IN THE MONUMENT.
+          </p>
+          <div className="mt-10 flex flex-wrap gap-3">
+            <Link href="/wall" className="btn btn-primary">
+              Enter the live Wall
+            </Link>
+            <Link href="/monument" className="btn btn-line">
+              Visit the Monument
+            </Link>
+          </div>
         </div>
       </section>
+
+      {event.phase === "archived" && shrine ? (
+        <section className="shrine-band">
+          <div className="section-monument">
+            <p className="kicker">The standing sentence</p>
+            <h2 className="sr-only">The sentence that stood first on this Wall</h2>
+            <WitnessPlaque message={shrine} event={event} />
+          </div>
+        </section>
+      ) : null}
 
       <section className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20">
         <p className="kicker mb-8">FAQ</p>
@@ -111,9 +119,12 @@ export default async function HomePage() {
           audited panel. Public anonymity is not a license to harm.
         </p>
         <div className="mt-10">
-            <Link href={event.phase === "archived" ? "/archive" : "/wall"} className="btn btn-line">
-            {event.phase === "archived" ? "Enter the archive" : `See ${wallTitle(event)}`}
+            <Link href={event.phase === "archived" ? "/archive" : "/watch"} className="btn btn-line">
+            {event.phase === "archived" ? "Enter the Archive" : "Watch the Wall"}
           </Link>
+            <Link href="/monument" className="btn btn-line">
+              Visit the Monument
+            </Link>
         </div>
       </section>
 
@@ -122,34 +133,21 @@ export default async function HomePage() {
   );
 }
 
-function Stat({
-  label,
-  value,
-  live = false,
-  ember = false,
-}: {
-  label: string;
-  value: string;
-  live?: boolean;
-  ember?: boolean;
-}) {
-  return (
-    <div className="stat-tablet">
-      <p
-        className={`stat-value ${live ? "text-ember" : ember ? "text-flame" : "text-paper"}`}
-      >
-        {live ? (
-          <span className="inline-flex items-center justify-center gap-2">
-            <span className="live-dot" aria-hidden="true" />
-            {value}
-          </span>
-        ) : (
-          value
-        )}
-      </p>
-      <p className="kicker mt-3">{label}</p>
-    </div>
-  );
+async function resolveShrine(
+  event: Awaited<ReturnType<typeof loadEvent>>,
+): Promise<PublicMessage | null> {
+  const winner = await loadLatestPublicWinner();
+  if (!winner || winner.isRemoved) return null;
+  return {
+    id: `winner-${winner.editionNumber}-${winner.publicNumber}`,
+    eventId: event.id,
+    publicNumber: winner.publicNumber,
+    text: winner.text,
+    isRemoved: false,
+    reactionCount: winner.reactionCount,
+    publishedAt: event.finalizedAt ?? event.endsAt,
+    finalRank: 1,
+  };
 }
 
 function Step({ n, title, body }: { n: string; title: string; body: string }) {

@@ -1,9 +1,22 @@
+import { networkInterfaces } from "node:os";
 import type { NextConfig } from "next";
 
 const isDevCommand = process.argv.includes("dev");
 
+function lanDevOrigins() {
+  const fromEnv = (process.env.ALLOWED_DEV_ORIGINS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const fromNics = Object.values(networkInterfaces())
+    .flat()
+    .flatMap((nic) => (nic && nic.family === "IPv4" && !nic.internal ? [nic.address] : []));
+  return [...new Set([...fromNics, ...fromEnv])];
+}
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  allowedDevOrigins: lanDevOrigins(),
   ...(isDevCommand
     ? { distDir: process.env.NEXT_DIST_DIR || ".next-webpack" }
     : process.env.NEXT_DIST_DIR
@@ -21,6 +34,13 @@ const nextConfig: NextConfig = {
       "@x402/svm/exact/client": false,
     };
     return config;
+  },
+  async redirects() {
+    return [
+      { source: "/live", destination: "/watch", permanent: false },
+      { source: "/opening", destination: "/open", permanent: false },
+      { source: "/invite", destination: "/open?from=invite", permanent: false },
+    ];
   },
   async headers() {
     return [
@@ -61,6 +81,14 @@ const nextConfig: NextConfig = {
           { key: "X-Robots-Tag", value: "noindex, nofollow" },
           { key: "Cache-Control", value: "private, no-store" },
         ],
+      },
+      {
+        source: "/watch/stream",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+      {
+        source: "/watch/stream/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
       {
         source: "/api/admin/:path*",

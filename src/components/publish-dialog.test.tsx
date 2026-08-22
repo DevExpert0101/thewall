@@ -82,18 +82,39 @@ const clock = {
   serverNow: "2026-08-13T00:17:51.000Z",
 };
 
+async function saveKeyAndPay(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByLabelText(/i saved my wall key/i));
+  await user.click(screen.getByRole("button", { name: /pay \$1/i }));
+}
+
 describe("publish dialog", () => {
+  it("refuses a new sentence after the server deadline", async () => {
+    render(
+      <PublishDialog
+        open
+        onOpenChange={() => undefined}
+        enabled
+        endsAt="2026-08-13T00:00:00.000Z"
+        serverNow="2026-08-13T00:00:01.000Z"
+      />,
+    );
+    expect(await screen.findByRole("heading", { name: /the wall has closed/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/no one can add another word/i).length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText(/your sentence/i)).not.toBeInTheDocument();
+  });
+
   it("walks write → preview before payment", async () => {
     const user = userEvent.setup();
     render(
       <PublishDialog open onOpenChange={() => undefined} enabled {...clock} />,
     );
     const preview = await screen.findByRole("button", { name: /^preview$/i });
+    expect(preview.closest(".dialog-dock")).toBeTruthy();
     await user.type(screen.getByLabelText(/your sentence/i), "I was here.");
     await user.click(preview);
     expect(await screen.findByText(/this is the sentence/i)).toBeInTheDocument();
     expect(screen.getByText(/“I was here.”/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /pay 1\.00 usdc/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /pay \$1/i })).not.toBeInTheDocument();
   });
 
   it("returns to write with recovery when preflight rejects the sentence", async () => {
@@ -161,9 +182,8 @@ describe("publish dialog", () => {
     await user.click(await screen.findByRole("button", { name: /^continue$/i }));
     await user.click(await screen.findByRole("button", { name: /pass-challenge/i }));
     await user.click(await screen.findByRole("button", { name: /^continue$/i }));
-    await user.click(await screen.findByRole("button", { name: /i saved my wall key/i }));
-    expect(screen.getByText(/simulation — no usdc leaves a wallet/i)).toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: /pay 1\.00 usdc/i }));
+    expect(screen.getByText(/practice mode — no money is taken/i)).toBeInTheDocument();
+    await saveKeyAndPay(user);
     expect(await screen.findByText("YOU ARE ON THE WALL.")).toBeInTheDocument();
     expect(initiateBasePayment).not.toHaveBeenCalled();
     const verifyCall = vi.mocked(fetch).mock.calls.find(([url]) => String(url).includes("/api/publish/verify"));
@@ -175,6 +195,49 @@ describe("publish dialog", () => {
         }),
       }),
     );
+  });
+
+  it("shows the confirming line once while the $1 is settling", async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/analytics")) return json({ ok: true });
+      if (url.includes("/api/publish/preflight")) {
+        return json({ text: "I was here.", moderationStatus: "approved" });
+      }
+      if (url.includes("/api/publish/intent")) {
+        return json({
+          intentId: INTENT_ID,
+          wallKey: "7K9P-X4MF-82QH-K3R2",
+          amount: "1.00",
+          recipient: "0x1111111111111111111111111111111111111111",
+          network: "base-sepolia",
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          simulated: true,
+          simulatedPaymentId: `0x${"cd".repeat(32)}`,
+        });
+      }
+      if (url.includes("/api/publish/verify")) {
+        return new Promise(() => undefined);
+      }
+      return json({ error: "not found" }, 404);
+    });
+    const user = userEvent.setup();
+    render(
+      <PublishDialog open onOpenChange={() => undefined} enabled {...clock} />,
+    );
+    await screen.findByRole("button", { name: /^preview$/i });
+    await user.type(screen.getByLabelText(/your sentence/i), "I was here.");
+    await user.click(screen.getByRole("button", { name: /^preview$/i }));
+    await user.click(await screen.findByRole("button", { name: /^continue$/i }));
+    await user.click(await screen.findByRole("button", { name: /pass-challenge/i }));
+    await user.click(await screen.findByRole("button", { name: /^continue$/i }));
+    await saveKeyAndPay(user);
+    expect(
+      await screen.findByText(/confirming your \$1\. this can take a few seconds/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/confirming your \$1\. this can take a few seconds/i),
+    ).toHaveLength(1);
   });
 
   it("celebrates a unique number and offers share after verification", async () => {
@@ -190,17 +253,174 @@ describe("publish dialog", () => {
     await user.click(await screen.findByRole("button", { name: /^continue$/i }));
     expect(await screen.findByText("7K9P-X4MF-82QH-K3R2")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /save your wall key/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /pay 1\.00 usdc/i })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: /i saved my wall key/i }));
-    await user.click(await screen.findByRole("button", { name: /pay 1\.00 usdc/i }));
+    expect(screen.getByRole("button", { name: /pay \$1/i })).toBeDisabled();
+    await saveKeyAndPay(user);
     expect(await screen.findByText("YOU ARE ON THE WALL.")).toBeInTheDocument();
     expect(screen.getByText((_, node) => (node?.textContent ?? "").replace(/\s+/g, " ").trim() === "MESSAGE #004291")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /share your message/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/“I was here.”/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Message #004291 on The Wall №001/)).toBeInTheDocument();
+    expect(screen.queryByText(/get your message seen/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/find me before history freezes/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /share this sentence/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /see this sentence/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save ownership receipt/i })).toBeInTheDocument();
     expect(screen.queryByText(/connect wallet/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/0x1111111111111111111111111111111111111111/i)).not.toBeInTheDocument();
     await waitFor(() => {
       expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/api/publish/verify"))).toBe(
         true,
       );
     });
+  });
+
+  it("explains a canceled payment without taking money", async () => {
+    initiateBasePayment.mockRejectedValueOnce(new Error("User rejected the request"));
+    const user = userEvent.setup();
+    render(
+      <PublishDialog open onOpenChange={() => undefined} enabled {...clock} />,
+    );
+    await screen.findByRole("button", { name: /^preview$/i });
+    await user.type(screen.getByLabelText(/your sentence/i), "I was here.");
+    await user.click(screen.getByRole("button", { name: /^preview$/i }));
+    await user.click(await screen.findByRole("button", { name: /^continue$/i }));
+    await user.click(await screen.findByRole("button", { name: /pass-challenge/i }));
+    await user.click(await screen.findByRole("button", { name: /^continue$/i }));
+    await saveKeyAndPay(user);
+    expect(await screen.findByText(/payment canceled/i)).toBeInTheDocument();
+    expect(screen.getByText(/no money was taken/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /pay \$1/i })).toBeInTheDocument();
+  });
+
+  it("keeps a pending payment recoverable without a second charge", async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/analytics")) return json({ ok: true });
+      if (url.includes("/api/publish/preflight")) {
+        return json({ text: "I was here.", moderationStatus: "approved" });
+      }
+      if (url.includes("/api/publish/intent")) {
+        return json({
+          intentId: INTENT_ID,
+          wallKey: "7K9P-X4MF-82QH-K3R2",
+          amount: "1.00",
+          recipient: "0x1111111111111111111111111111111111111111",
+          network: "base-sepolia",
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        });
+      }
+      if (url.includes("/api/publish/verify")) {
+        return json(
+          {
+            error: "Payment is still confirming.",
+            code: "PAYMENT_PENDING",
+            recovery: "Keep this page open.",
+          },
+          202,
+        );
+      }
+      return json({ error: "not found" }, 404);
+    });
+    const user = userEvent.setup();
+    render(
+      <PublishDialog open onOpenChange={() => undefined} enabled {...clock} />,
+    );
+    await screen.findByRole("button", { name: /^preview$/i });
+    await user.type(screen.getByLabelText(/your sentence/i), "I was here.");
+    await user.click(screen.getByRole("button", { name: /^preview$/i }));
+    await user.click(await screen.findByRole("button", { name: /^continue$/i }));
+    await user.click(await screen.findByRole("button", { name: /pass-challenge/i }));
+    await user.click(await screen.findByRole("button", { name: /^continue$/i }));
+    await saveKeyAndPay(user);
+    expect(await screen.findByText(/your \$1 is still confirming/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/do not pay again/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /confirm payment/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /pay \$1/i })).not.toBeInTheDocument();
+  });
+
+  it("recovers a paid checkout after the client crashes", async () => {
+    sessionStorage.setItem(
+      "thewall:checkout",
+      JSON.stringify({
+        intentId: INTENT_ID,
+        paymentId: `0x${"ab".repeat(32)}`,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        text: "I was here.",
+        wallKey: "7K9P-X4MF-82QH-K3R2",
+      }),
+    );
+    render(<PublishDialog open onOpenChange={() => undefined} enabled {...clock} />);
+    expect(await screen.findByText("YOU ARE ON THE WALL.")).toBeInTheDocument();
+    expect(screen.getByText((_, node) => (node?.textContent ?? "").replace(/\s+/g, " ").trim() === "MESSAGE #004291")).toBeInTheDocument();
+    expect(initiateBasePayment).not.toHaveBeenCalled();
+  });
+
+  it("explains a verified payment that arrived after close", async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/analytics")) return json({ ok: true });
+      if (url.includes("/api/publish/preflight")) {
+        return json({ text: "I was here.", moderationStatus: "approved" });
+      }
+      if (url.includes("/api/publish/intent")) {
+        return json({
+          intentId: INTENT_ID,
+          wallKey: "7K9P-X4MF-82QH-K3R2",
+          amount: "1.00",
+          recipient: "0x1111111111111111111111111111111111111111",
+          network: "base-sepolia",
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        });
+      }
+      if (url.includes("/api/publish/verify")) {
+        return json(
+          {
+            error: "The Wall closed during checkout.",
+            code: "PAID_AFTER_CLOSE",
+            recovery: "Your $1 was received after The Wall closed. The sentence was not published.",
+          },
+          409,
+        );
+      }
+      return json({ error: "not found" }, 404);
+    });
+    const user = userEvent.setup();
+    render(<PublishDialog open onOpenChange={() => undefined} enabled {...clock} />);
+    await screen.findByRole("button", { name: /^preview$/i });
+    await user.type(screen.getByLabelText(/your sentence/i), "I was here.");
+    await user.click(screen.getByRole("button", { name: /^preview$/i }));
+    await user.click(await screen.findByRole("button", { name: /^continue$/i }));
+    await user.click(await screen.findByRole("button", { name: /pass-challenge/i }));
+    await user.click(await screen.findByRole("button", { name: /^continue$/i }));
+    await saveKeyAndPay(user);
+    expect(await screen.findByText(/closed before this sentence could be carved/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not reverse an on-chain transfer/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /pay \$1/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /confirm payment/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps remaining time visible while composing in the last hour", async () => {
+    render(
+      <PublishDialog
+        open
+        onOpenChange={() => undefined}
+        enabled
+        endsAt="2026-08-13T01:00:00.000Z"
+        serverNow="2026-08-13T00:17:51.000Z"
+      />,
+    );
+    expect(await screen.findByText(/43 MINUTES REMAIN/i)).toBeInTheDocument();
+    expect(screen.getByText(/write\. preview\. your wall key\. pay \$1/i)).toBeInTheDocument();
+  });
+
+  it("collects the check on preview so continue can skip a second challenge screen", async () => {
+    const user = userEvent.setup();
+    render(<PublishDialog open onOpenChange={() => undefined} enabled {...clock} />);
+    await screen.findByRole("button", { name: /^preview$/i });
+    await user.type(screen.getByLabelText(/your sentence/i), "I was here.");
+    await user.click(screen.getByRole("button", { name: /^preview$/i }));
+    await user.click(await screen.findByRole("button", { name: /pass-challenge/i }));
+    await user.click(screen.getByRole("button", { name: /^continue$/i }));
+    expect(await screen.findByRole("heading", { name: /save your wall key/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /a quick check/i })).not.toBeInTheDocument();
   });
 });

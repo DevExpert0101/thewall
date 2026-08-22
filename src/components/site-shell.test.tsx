@@ -17,4 +17,13 @@ describe("SiteShell browsing", () => {
     );
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("points readers to how the monument works", () => {
+    const { getByRole } = render(
+      <SiteShell>
+        <p>The wall</p>
+      </SiteShell>,
+    );
+    expect(getByRole("link", { name: /how it works/i })).toHaveAttribute("href", "/how-it-works");
+  });
 });

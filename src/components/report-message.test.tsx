@@ -42,7 +42,7 @@ describe("public report", () => {
     render(<ReportMessage messageId="00000000-0000-4000-8000-000000000009" />);
     await user.click(screen.getByRole("button", { name: /report this sentence/i }));
     await user.selectOptions(screen.getByLabelText(/reason/i), "hate");
-    await user.click(screen.getByRole("button", { name: /submit report/i }));
+    await user.click(screen.getByRole("button", { name: /send report/i }));
     expect(await screen.findByText(/report received/i)).toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.some(([url, init]) => {
       return String(url).includes("/api/report") && String((init as RequestInit).body).includes("hate");

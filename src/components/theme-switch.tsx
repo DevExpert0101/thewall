@@ -11,6 +11,8 @@ export function ThemeSwitch() {
   const menuId = useId();
 
   useEffect(() => {
+    // document theme is applied by the boot script; read it after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from document
     setTheme(resolveDocumentTheme());
   }, []);
 
@@ -20,7 +22,9 @@ export function ThemeSwitch() {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     }
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      rootRef.current?.querySelector("button")?.focus();
     }
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);

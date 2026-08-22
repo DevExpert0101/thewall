@@ -13,5 +13,8 @@ describe("public message search", () => {
 
     const miss = await searchPublicMessages("local", "no such inscription exists here");
     expect(miss).toEqual([]);
+
+    const tooShort = await searchPublicMessages("local", "ab");
+    expect(tooShort).toEqual([]);
   });
 });

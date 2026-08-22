@@ -7,8 +7,14 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:invariants": "vitest run src/lib/testing",
+    "test:db": "node scripts/verify-migrations.mjs",
+    "test:qa": "node scripts/qa.mjs",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts",
+    "test:load": "node scripts/load-report.mjs",
     "db:verify": "node scripts/verify-migrations.mjs"
   },
   "dependencies": {
@@ -37,6 +43,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.4.1",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",

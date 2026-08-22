@@ -11,6 +11,7 @@ export async function POST(request: Request) {
     const body = adminModerateSchema.parse(await readJson(request));
     const result = await moderateMessage({
       adminId: admin.id,
+      adminEmail: admin.email,
       messageId: body.messageId,
       action: body.action,
       reason: body.reason,

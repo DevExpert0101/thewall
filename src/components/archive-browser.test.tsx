@@ -69,7 +69,13 @@ describe("archive browser", () => {
     );
     expect(screen.getByText(/rank #1/i)).toBeInTheDocument();
     expect(screen.getByText(ARCHIVAL_REMOVAL_TEXT)).toBeInTheDocument();
+    expect(screen.getByText(/find a sentence/i)).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /most/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /hidden gems/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /final hour/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /rising/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /leave your mark/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /react with fire/i })).not.toBeInTheDocument();
     await user.type(screen.getByPlaceholderText(/#004291/), "#000004");
     await user.click(screen.getByRole("button", { name: /^find$/i }));
     await waitFor(() => {

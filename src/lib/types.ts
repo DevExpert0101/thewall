@@ -25,6 +25,10 @@ export type EventSnapshot = {
   network: string;
   priceUsdc: string;
   editionNumber?: number;
+  themeSlug?: string | null;
+  themeQuestion?: string | null;
+  themeDescription?: string | null;
+  monumentNumber?: number | null;
   archiveHash?: string | null;
   merkleRoot?: string | null;
   archiveUri?: string | null;
@@ -55,6 +59,14 @@ export type EditionSummary = {
   archiveUri: string | null;
   proofTx: string | null;
   winning: EditionHighlight | null;
+  monumentNumber?: number | null;
+  themeQuestion?: string | null;
+};
+
+export type FirePaceRecord = {
+  publicNumber: number;
+  threshold: number;
+  elapsedMs: number;
 };
 
 export type EditionRecords = {
@@ -65,10 +77,22 @@ export type EditionRecords = {
   mostReacted: EditionHighlight | null;
   milestone100000: EditionHighlight | null;
   milestone250000: EditionHighlight | null;
+  milestones: Array<{
+    kind: "message" | "fire";
+    value: number;
+    publicNumber: number | null;
+  }>;
   totalMessages: number;
   totalReactions: number;
   durationHours: number;
   peakMessagesPerMinute: number;
+  peakReactionsPerMinute: number | null;
+  mostReactionsInOneHour: number | null;
+  fastestTo100: FirePaceRecord | null;
+  fastestTo1000: FirePaceRecord | null;
+  fastestTo10000: FirePaceRecord | null;
+  top100: EditionHighlight[];
+  fireLedgerComplete: boolean;
 };
 
 export type AllTimeRecords = {
@@ -80,6 +104,11 @@ export type AllTimeRecords = {
     reactionCount: number;
   } | null;
   largestFinalMinute: { editionNumber: number; peakMessagesPerMinute: number } | null;
+  largestReactionMinute: { editionNumber: number; peakReactionsPerMinute: number } | null;
+  largestReactionHour: { editionNumber: number; mostReactionsInOneHour: number } | null;
+  fastestTo100: (FirePaceRecord & { editionNumber: number }) | null;
+  fastestTo1000: (FirePaceRecord & { editionNumber: number }) | null;
+  fastestTo10000: (FirePaceRecord & { editionNumber: number }) | null;
 };
 
 export type CertificatePayload = {
@@ -93,4 +122,7 @@ export type CertificatePayload = {
   tagline: string;
   editionNumber?: number;
   totalMessages?: number;
+  archiveHash?: string | null;
+  merkleRoot?: string | null;
+  proofTx?: string | null;
 };

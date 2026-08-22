@@ -6,6 +6,7 @@ import {
   closeSimulatedWall,
   createSimulatedIntent,
   currentSimulatedEvent,
+  expireSimulatedWall,
   fulfillSimulatedPayment,
   getSimulatedArchive,
   getSimulatedMessage,
@@ -16,11 +17,13 @@ import {
   holdSimulatedWall,
   hurrySimulatedClock,
   listSimulatedMessages,
+  pickSimulatedRandomMessages,
   startSimulatedWall,
   lookupSimulatedCertificate,
   publishSimulatedMark,
   reopenSimulatedWall,
   resetSimulationState,
+  moderateSimulatedMessage,
   runFullSimulation,
   simulatedArchivedEvent,
   simulatedLiveEvent,
@@ -45,9 +48,15 @@ describe("live simulation", () => {
 
   it("sorts trending, hot, and new without fabricating a database", () => {
     const trending = listSimulatedMessages({ sort: "trending", limit: 6 }).messages;
+    const rising = listSimulatedMessages({ sort: "rising", limit: 6 }).messages;
     const hot = listSimulatedMessages({ sort: "hot", limit: 6 }).messages;
     const newest = listSimulatedMessages({ sort: "new", limit: 1 }).messages[0];
     expect(trending.length).toBe(6);
+    expect(rising.map((message) => message.publicNumber)).toEqual(
+      trending.map((message) => message.publicNumber),
+    );
+    expect(rising[0]?.publicNumber).toBe(15);
+    expect(rising.some((message) => message.publicNumber === 4)).toBe(false);
     expect(hot[0]?.reactionCount).toBeGreaterThanOrEqual(hot[1]?.reactionCount ?? 0);
     expect(newest?.publicNumber).toBe(18);
     const paged = listSimulatedMessages({ sort: "new", limit: 6 });
@@ -55,6 +64,27 @@ describe("live simulation", () => {
     const more = listSimulatedMessages({ sort: "new", limit: 6, cursor: paged.nextCursor ?? undefined });
     expect(more.messages[0]?.publicNumber).toBeLessThan(paged.messages.at(-1)?.publicNumber ?? 0);
     expect(more.nextCursor).toBe("12");
+    const gems = listSimulatedMessages({ sort: "gems", limit: 18 }).messages;
+    expect(gems.every((message) => message.reactionCount >= 3)).toBe(true);
+    expect(gems.some((message) => message.publicNumber === 4)).toBe(false);
+    expect(gems[0]?.publicNumber).toBe(15);
+    const now = new Date();
+    const finals = listSimulatedMessages({
+      sort: "final",
+      limit: 20,
+      endsAt: now.toISOString(),
+      now,
+    }).messages;
+    expect(finals.length).toBeGreaterThan(0);
+    expect(
+      finals.every((message) => now.getTime() - Date.parse(message.publishedAt) <= 60 * 60 * 1000),
+    ).toBe(true);
+    const drawn = pickSimulatedRandomMessages({ exclude: [4, 8], count: 2 });
+    expect(drawn.messages).toHaveLength(2);
+    expect(drawn.messages.every((message) => message.publicNumber !== 4 && message.publicNumber !== 8)).toBe(
+      true,
+    );
+    expect(drawn.total).toBeGreaterThanOrEqual(18);
   });
 
   it("loads a simulated message by public number and redacts removed text", () => {
@@ -64,6 +94,18 @@ describe("live simulation", () => {
     const removed = getSimulatedMessage(8);
     expect(removed.isRemoved).toBe(true);
     expect(removed.text).toBe("Message removed under archive policy.");
+  });
+
+  it("removes and restores a live sentence without a database", () => {
+    const kept = getSimulatedMessage(4);
+    expect(kept.isRemoved).toBe(false);
+    const removed = moderateSimulatedMessage({ messageId: kept.id, action: "remove" });
+    expect(removed.publicNumber).toBe(4);
+    expect(getSimulatedMessage(4).isRemoved).toBe(true);
+    expect(getSimulatedMessage(4).text).toBe("Message removed under archive policy.");
+    moderateSimulatedMessage({ messageId: kept.id, action: "restore" });
+    expect(getSimulatedMessage(4).isRemoved).toBe(false);
+    expect(getSimulatedMessage(4).text).toMatch(/fifty years/i);
   });
 
   it("opens a frozen archive with final ranks and no further writes", () => {
@@ -83,19 +125,23 @@ describe("live simulation", () => {
       now,
     }).messages;
     expect(listed.length).toBe(event.totalMessages);
-    expect(listed.every((message) => message.finalRank !== null)).toBe(true);
+    expect(listed.filter((message) => !message.isRemoved).every((message) => message.finalRank !== null)).toBe(
+      true,
+    );
     expect(listed[0]?.publicNumber).toBe(4);
     expect(listed[0]?.finalRank).toBe(1);
-    expect(listed.map((message) => message.finalRank)).toEqual(
-      listed.map((_, index) => index + 1),
-    );
+    const livingRanks = listed
+      .filter((message) => !message.isRemoved)
+      .map((message) => message.finalRank)
+      .sort((a, b) => (a ?? 0) - (b ?? 0));
+    expect(livingRanks).toEqual(livingRanks.map((_, index) => index + 1));
     for (const message of listed) {
       expect(Date.parse(message.publishedAt)).toBeLessThanOrEqual(Date.parse(event.endsAt));
     }
     const removed = listed.find((message) => message.publicNumber === 8);
     expect(removed?.isRemoved).toBe(true);
     expect(removed?.text).toBe("Message removed under archive policy.");
-    expect(removed?.finalRank).toBeGreaterThan(0);
+    expect(removed?.finalRank).toBeNull();
     expect(event.id).toBe(simulatedLiveEvent(now).id);
   });
 
@@ -167,6 +213,41 @@ describe("live simulation", () => {
     expect(addSimulatedReaction(id, "tester-other")).toBe(first + 1);
   });
 
+  it("replays the same simulated 🔥 key without incrementing", () => {
+    const id = "00000000-0000-4000-8000-000000000002";
+    const key = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const first = addSimulatedReaction(id, "tester-idem", key);
+    expect(addSimulatedReaction(id, "tester-idem", key)).toBe(first);
+  });
+
+  it("refuses a sentence already on this Wall before another $1", () => {
+    expect(() =>
+      publishSimulatedMark(
+        "If you are reading this in fifty years, I drove a night bus and I liked the quiet.",
+      ),
+    ).toThrow(AppError);
+    try {
+      publishSimulatedMark(
+        "If you are reading this in fifty years, I drove a night bus and I liked the quiet.",
+      );
+    } catch (error) {
+      expect((error as AppError).code).toBe(ERROR_CODES.MODERATION_REJECTED);
+    }
+  });
+
+  it("does not consume a message number when moderation rejects", () => {
+    try {
+      publishSimulatedMark("a".repeat(50));
+      throw new Error("expected reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AppError);
+      expect((error as AppError).code).toBe(ERROR_CODES.MODERATION_REJECTED);
+    }
+    const paid = publishSimulatedMark("A quiet number after a refused sentence.");
+    expect(paid.publicNumber).toBe(19);
+    expect(getSimulatedMessage(8).text).toBe("Message removed under archive policy.");
+  });
+
   it("publishes a simulated payment and opens the certificate after the clock", () => {
     const wallKey = createWallKey();
     const checkout = createSimulatedIntent({
@@ -188,7 +269,9 @@ describe("live simulation", () => {
     const ledger = getSimulatedArchive();
     expect(ledger?.event.phase).toBe("archived");
     expect(ledger?.messages.some((message) => message.publicNumber === 19)).toBe(true);
-    expect(ledger?.messages.every((message) => message.finalRank !== null)).toBe(true);
+    expect(ledger?.messages.filter((message) => !message.isRemoved).every((message) => message.finalRank !== null)).toBe(
+      true,
+    );
     expect(
       listSimulatedMessages({ sort: "hot", limit: 48 }).messages.some((message) => message.publicNumber === 19),
     ).toBe(true);
@@ -199,6 +282,48 @@ describe("live simulation", () => {
     expect(certificate?.text).toMatch(/local chamber/i);
     expect(certificate?.finalRank).toBe(frozen.finalRank);
     expect(lookupSimulatedCertificate("7K9P-X4MF-82QH-K3R2")).toBeNull();
+  });
+
+  it("recovers a fulfilled intent without charging again", () => {
+    const wallKey = createWallKey();
+    const checkout = createSimulatedIntent({
+      text: "Recover this sentence after a crash.",
+      userId: "local-sim",
+      claimSecretHash: hashWallKey(wallKey),
+    });
+    const first = fulfillSimulatedPayment({
+      intentId: checkout.intentId,
+      userId: "local-sim",
+      paymentId: checkout.simulatedPaymentId,
+    });
+    const again = fulfillSimulatedPayment({
+      intentId: checkout.intentId,
+      userId: "local-sim",
+      paymentId: checkout.simulatedPaymentId,
+    });
+    expect(again.publicNumber).toBe(first.publicNumber);
+    expect(again.recovered).toBe(true);
+  });
+
+  it("refuses to carve after close when the payment already exists", () => {
+    const wallKey = createWallKey();
+    const checkout = createSimulatedIntent({
+      text: "Paid as the clock hit zero.",
+      userId: "local-sim",
+      claimSecretHash: hashWallKey(wallKey),
+    });
+    expireSimulatedWall();
+    try {
+      fulfillSimulatedPayment({
+        intentId: checkout.intentId,
+        userId: "local-sim",
+        paymentId: checkout.simulatedPaymentId,
+      });
+      throw new Error("expected paid-after-close");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AppError);
+      expect((error as AppError).code).toBe(ERROR_CODES.PAID_AFTER_CLOSE);
+    }
   });
 
   it("runs countdown, payment, fire, and finish in one local loop", () => {
@@ -250,15 +375,26 @@ describe("live simulation", () => {
     expect(listSimulatedMessages({ sort: "new", limit: 20 }).messages.length).toBeGreaterThan(0);
   });
 
-  it("seals an expired live day into the archive instead of dropping it", () => {
+  it("keeps an expired live day private until stewardship finishes it", () => {
     startSimulatedWall({ title: "The first wall", durationMinutes: 5 });
     configureSimulatedWall({
       startsAt: "2026-08-15T01:00:00.000Z",
       endsAt: "2026-08-15T01:05:00.000Z",
     });
-    const sealed = currentSimulatedEvent(new Date("2026-08-15T01:06:00.000Z"));
+    const reviewing = currentSimulatedEvent(new Date("2026-08-15T01:06:00.000Z"));
+    expect(reviewing.phase).toBe("finalizing");
+    expect(reviewing.title).toBe("The first wall");
+    expect(listSimulatedEditions()).toHaveLength(0);
+    expect(
+      listSimulatedMessages({
+        sort: "hot",
+        limit: 3,
+        now: new Date("2026-08-15T01:06:00.000Z"),
+      }).messages.every((message) => message.finalRank === null),
+    ).toBe(true);
+    closeSimulatedWall(new Date("2026-08-15T01:06:00.000Z"));
+    const sealed = currentSimulatedEvent();
     expect(sealed.phase).toBe("archived");
-    expect(sealed.title).toBe("The first wall");
     const editions = listSimulatedEditions();
     expect(editions).toHaveLength(1);
     expect(editions[0]?.title).toBe("The first wall");
@@ -276,6 +412,20 @@ describe("live simulation", () => {
     expect(hurried.title).toBe("THE WALL №007");
   });
 
+  it("keeps a 5-minute mock frozen after zero instead of sliding a new window", () => {
+    const opened = startSimulatedWall({
+      title: "FIVE MINUTES",
+      durationMinutes: 5,
+      startsAt: "2026-08-16T12:00:00.000Z",
+      endsAt: "2026-08-16T12:15:00.000Z",
+    });
+    expect(Date.parse(opened.endsAt) - Date.parse(opened.startsAt)).toBe(5 * 60_000);
+    const afterZero = currentSimulatedEvent(new Date("2026-08-16T12:06:00.000Z"));
+    expect(afterZero.phase).toBe("finalizing");
+    expect(afterZero.endsAt).toBe(opened.endsAt);
+    expect(Date.parse(afterZero.endsAt) - Date.parse(afterZero.startsAt)).toBe(5 * 60_000);
+  });
+
   it("starts a new live day after a seal without dropping the library", () => {
     closeSimulatedWall();
     expect(currentSimulatedEvent().phase).toBe("archived");
@@ -288,11 +438,38 @@ describe("live simulation", () => {
   });
 
   it("treats a missing Supabase config as simulation", () => {
+    vi.stubEnv("VERCEL_ENV", "development");
     vi.stubEnv("NEXT_PUBLIC_SIMULATE_LIVE", "");
     vi.stubEnv("SIMULATE_LIVE", "");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
     expect(isSimulation()).toBe(true);
+  });
+
+  it("refuses a simulated checkout when Vercel production is set", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    const { assertNotSimulatedInProduction } = await import("@/lib/data/simulation");
+    expect(() => assertNotSimulatedInProduction("local")).toThrow(AppError);
+    expect(() => assertNotSimulatedInProduction("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")).not.toThrow();
+  });
+
+  it("opens the mock wall on Vercel instead of an empty waiting room", () => {
+    vi.stubEnv("VERCEL", "1");
+    resetSimulationState();
+    const event = currentSimulatedEvent();
+    expect(event.phase).toBe("live");
+    expect(event.totalMessages).toBeGreaterThan(0);
+    expect(event.totalReactions).toBeGreaterThan(0);
+  });
+
+  it("serves the local Wall for reads when Vercel production has no Supabase", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
+    const { getEventSnapshot } = await import("@/lib/data/event");
+    const event = await getEventSnapshot("the-wall");
+    expect(event.id).toBe("local");
+    expect(event.phase).toBe("live");
   });
 });
 
