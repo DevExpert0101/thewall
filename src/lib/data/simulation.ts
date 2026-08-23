@@ -19,7 +19,7 @@ import { monumentFromSealedWall } from "@/lib/monument/from-archive";
 import { parseMonumentCapacity } from "@/lib/monument/policy";
 import type { MonumentEntry } from "@/lib/monument/types";
 import type { CertificatePayload, EditionSummary, EventSnapshot, PublicMessage } from "@/lib/types";
-import { editionNumberOf, formatUtcDate } from "@/lib/utils";
+import { editionNumberOf, formatUtcDate, parsePublicNumber } from "@/lib/utils";
 import { pageWindow } from "@/lib/wall/feed";
 import { pickPublicNumbers } from "@/lib/wall/random";
 
@@ -314,6 +314,12 @@ export function resetSimulationState() {
       // ignore
     }
   }
+}
+
+/** Wipe the local ledger, including sealed editions, then open a new live day. */
+export function startScratchSimulation() {
+  resetSimulationState();
+  resetLiveSimulation();
 }
 
 /** New live day. Sealed editions stay in the library. */
@@ -1170,7 +1176,12 @@ export function isSimulationEvent(eventId: string): boolean {
 export function assertNotSimulatedInProduction(eventId: string): void {
   if (!isVercelProduction()) return;
   if (!isSimulationEvent(eventId)) return;
-  throw new AppError(ERROR_CODES.CONFIG, "The live Wall is not configured.", 503);
+  throw new AppError(
+    ERROR_CODES.CONFIG,
+    "This production site cannot take a simulated $1.",
+    503,
+    "The mock Wall has no shared ledger on Vercel. Use local next dev to fake a payment, or connect Supabase and Base Sepolia on this deploy for a real testnet $1.",
+  );
 }
 
 function simulationRecipient(): `0x${string}` {
@@ -1435,9 +1446,52 @@ export function listSimulatedOpsAudit(limit = 40): Array<SimulatedOpsAudit & { i
 }
 
 export function listSimulatedIntents(): Array<{ status: SimIntent["status"]; createdAt: string }> {
-  ensureLoaded();
-  return [...intents.values()].map((intent) => ({
+  return listSimulatedPaymentRecords().map((row) => ({
+    status: row.status,
+    createdAt: row.createdAt,
+  }));
+}
+
+export type SimulatedPaymentRecord = {
+  paymentId: string;
+  amount: string;
+  currency: "USDC";
+  network: string;
+  recipient: string;
+  status: SimIntent["status"];
+  createdAt: string;
+  publicNumber: number | null;
+};
+
+function recordFromIntent(intent: SimIntent): SimulatedPaymentRecord {
+  const write = extraWrites.find((row) => tokensEqual(row.claimHash, intent.claimSecretHash));
+  return {
+    paymentId: intent.paymentId,
+    amount: intent.amount,
+    currency: intent.currency,
+    network: intent.network,
+    recipient: intent.recipient,
     status: intent.status,
     createdAt: intent.createdAt,
-  }));
+    publicNumber: write?.publicNumber ?? null,
+  };
+}
+
+/** Local $1 checkouts only. Never includes Wall Keys, session ids, or message hashes. */
+export function listSimulatedPaymentRecords(): SimulatedPaymentRecord[] {
+  ensureLoaded();
+  return [...intents.values()]
+    .map(recordFromIntent)
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+}
+
+export function lookupSimulatedPaymentRecord(q: string): SimulatedPaymentRecord | null {
+  const rows = listSimulatedPaymentRecords();
+  const hash = q.trim().toLowerCase();
+  if (/^0x[0-9a-f]{64}$/.test(hash)) {
+    return rows.find((row) => row.paymentId === hash) ?? null;
+  }
+  const n = parsePublicNumber(q);
+  if (n) return rows.find((row) => row.publicNumber === n) ?? null;
+  return null;
 }

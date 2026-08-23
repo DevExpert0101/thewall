@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ERROR_CODES } from "@/lib/errors";
-import { mapPublishError } from "@/lib/data/rate-limit";
+import { consumeMemoryRateLimit, mapPublishError, resetMemoryRateLimits } from "@/lib/data/rate-limit";
 
 describe("write rejection mapping", () => {
   it("maps event_upcoming", () => {
@@ -32,5 +32,24 @@ describe("write rejection mapping", () => {
   });
   it("maps frozen checkout terms", () => {
     expect(mapPublishError("intent_terms_frozen").code).toBe(ERROR_CODES.HASH_MISMATCH);
+  });
+});
+
+describe("Vercel-style write shedding", () => {
+  it("keeps the first N checkout attempts and 429s the rest in the same window", () => {
+    resetMemoryRateLimits();
+    let accepted = 0;
+    let limited = 0;
+    for (let i = 0; i < 25; i += 1) {
+      try {
+        consumeMemoryRateLimit("intent:ip:burst", 10, 60);
+        accepted += 1;
+      } catch (error) {
+        expect((error as { code?: string }).code).toBe(ERROR_CODES.RATE_LIMITED);
+        limited += 1;
+      }
+    }
+    expect(accepted).toBe(10);
+    expect(limited).toBe(15);
   });
 });

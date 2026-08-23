@@ -95,12 +95,12 @@ export class AppError extends Error {
   readonly status: number;
   readonly recovery: string;
 
-  constructor(code: ErrorCode, message: string, status = 400) {
+  constructor(code: ErrorCode, message: string, status = 400, recovery?: string) {
     super(message);
     this.name = "AppError";
     this.code = code;
     this.status = status;
-    this.recovery = RECOVERY[code];
+    this.recovery = recovery ?? RECOVERY[code];
   }
 }
 

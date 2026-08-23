@@ -24,6 +24,15 @@ describe("visitor feedback", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe("/api/feedback");
     expect(String(fetchMock.mock.calls[0]?.[1]?.body ?? "")).toMatch(/pay button/i);
     expect(await screen.findByText(/received/i)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/off the wall/i);
     vi.unstubAllGlobals();
+  });
+
+  it("lets a visitor mark what the note is about without a native select", async () => {
+    const user = userEvent.setup();
+    render(<FeedbackForm />);
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText(/something broken/i));
+    expect(screen.getByLabelText(/something broken/i)).toBeChecked();
   });
 });

@@ -16,7 +16,7 @@ import {
   currentSimulatedEvent,
   expireSimulatedWall,
   getSimulatedOps,
-  resetLiveSimulation,
+  startScratchSimulation,
   setSimulatedOps,
   startSimulatedWall,
 } from "@/lib/data/simulation";
@@ -73,6 +73,27 @@ function clockInput(input: AdminEventInput) {
   };
 }
 
+/** Start now when the form still holds a previous day's already-finished window. */
+function openWindowFromInput(input: AdminEventInput): {
+  startsAt?: string;
+  endsAt?: string;
+  durationMinutes?: number;
+} {
+  const durationMinutes = input.durationMinutes;
+  const startMs = input.startsAt ? Date.parse(input.startsAt) : Number.NaN;
+  if (!Number.isFinite(startMs)) {
+    return { durationMinutes };
+  }
+  if (startMs > Date.now()) {
+    return { startsAt: input.startsAt, endsAt: input.endsAt, durationMinutes };
+  }
+  const minutes = Math.max(1, durationMinutes ?? DEFAULT_DURATION_MINUTES);
+  if (startMs + minutes * 60_000 <= Date.now()) {
+    return { durationMinutes };
+  }
+  return { startsAt: input.startsAt, endsAt: input.endsAt, durationMinutes };
+}
+
 function applyOpsFromInput(current: EventOpsControls, input: AdminEventInput): EventOpsControls {
   return {
     publishEnabled: input.publishEnabled ?? current.publishEnabled,
@@ -106,7 +127,7 @@ async function applySimulatedEvent(
   }
   if (action === "reset") {
     const before = preview(currentSimulatedEvent(), getSimulatedOps());
-    resetLiveSimulation();
+    startScratchSimulation();
     if (input.title || input.durationMinutes) {
       configureSimulatedWall({
         title: input.title,
@@ -161,9 +182,7 @@ async function applySimulatedEvent(
     const before = currentSimulatedEvent();
     startSimulatedWall({
       title: input.title,
-      durationMinutes: input.durationMinutes,
-      startsAt: input.startsAt,
-      endsAt: input.endsAt,
+      ...openWindowFromInput(input),
     });
     await markSimulatedClosed(false);
     const after = currentSimulatedEvent();

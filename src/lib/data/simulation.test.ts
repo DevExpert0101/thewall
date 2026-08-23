@@ -449,7 +449,13 @@ describe("live simulation", () => {
   it("refuses a simulated checkout when Vercel production is set", async () => {
     vi.stubEnv("VERCEL_ENV", "production");
     const { assertNotSimulatedInProduction } = await import("@/lib/data/simulation");
-    expect(() => assertNotSimulatedInProduction("local")).toThrow(AppError);
+    expect(() => assertNotSimulatedInProduction("local")).toThrow(/simulated \$1/);
+    try {
+      assertNotSimulatedInProduction("local");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AppError);
+      expect((error as AppError).recovery).toMatch(/Supabase and Base Sepolia/);
+    }
     expect(() => assertNotSimulatedInProduction("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")).not.toThrow();
   });
 

@@ -14,6 +14,13 @@ const injected: PublicMessage = {
   finalRank: null,
 };
 
+describe("card layout", () => {
+  it("uses a stretchable wall card so short sentences match the row", () => {
+    const { container } = render(<MessageCard message={injected} phase="live" dense />);
+    expect(container.querySelector("article")).toHaveClass("wall-card");
+  });
+});
+
 describe("message identity", () => {
   it("names the object as an edition and message number", () => {
     render(
