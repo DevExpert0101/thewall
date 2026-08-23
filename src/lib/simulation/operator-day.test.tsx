@@ -92,6 +92,7 @@ function overviewFromSim(): AdminOverview {
     claimAttempts: [],
     reactionSignals: [],
     recentFailures: [],
+    recentPayments: [],
     openReports: [],
     flaggedMessages: [],
     reviewRanks: [],

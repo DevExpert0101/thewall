@@ -42,8 +42,8 @@ export const MessageCard = memo(function MessageCard({
   return (
     <article
       className={cn(
-        "inscribe p-4 sm:p-5",
-        dense && "wall-card p-3.5 sm:p-4",
+        "inscribe wall-card p-4 sm:p-5",
+        dense && "p-3.5 sm:p-4",
         fresh && !sealed && "wall-card-fresh animate-message-in",
         featured && "wall-card-featured",
       )}

@@ -40,6 +40,7 @@ export type AdminPaymentHit = {
   network: string;
   status: string;
   verifiedAt: string | null;
+  createdAt: string;
   sender: string;
   recipient: string;
   intentStatus: string | null;
@@ -152,6 +153,7 @@ export type AdminOverview = {
   config: AdminConfigPreview;
   totals: { messages: number; reactions: number; usdc: number };
   recentFailures: { reasonCode: string; createdAt: string; transactionHash: string | null }[];
+  recentPayments: AdminPaymentHit[];
   openReports: AdminReportRow[];
   flaggedMessages: { id: string; publicNumber: number; moderationStatus: string }[];
   reviewRanks: AdminMessageHit[];

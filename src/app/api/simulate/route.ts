@@ -6,7 +6,7 @@ import {
   publishSimulatedMark,
   listSimulatedEditions,
   reopenSimulatedWall,
-  resetLiveSimulation,
+  startScratchSimulation,
   runFullSimulation,
   warmSimulatedFires,
 } from "@/lib/data/simulation";
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     const body = bodySchema.parse(await readJson(request));
     let published: { publicNumber: number } | undefined;
     if (body.action === "reset") {
-      resetLiveSimulation();
+      startScratchSimulation();
       await markSimulatedClosed(false);
     }
     if (body.action === "reopen") {

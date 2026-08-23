@@ -50,6 +50,7 @@ const overview: AdminOverview = {
   claimAttempts: [],
   reactionSignals: [],
   recentFailures: [],
+  recentPayments: [],
   openReports: [
     {
       id: "r1",

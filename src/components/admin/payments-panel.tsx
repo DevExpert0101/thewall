@@ -5,14 +5,32 @@ import { AdminAlert, AdminEmpty, AdminPageHeader, AdminRow } from "@/components/
 import type { AdminOverview, AdminPaymentHit } from "@/lib/admin/types";
 import { formatPublicNumber } from "@/lib/utils";
 
+function PaymentDetail({ payment }: { payment: AdminPaymentHit }) {
+  return (
+    <dl className="admin-dl">
+      <AdminRow k="Tx" v={payment.transactionHash} />
+      <AdminRow k="Status" v={payment.status} />
+      <AdminRow k="Amount" v={`${payment.amount} ${payment.currency}`} />
+      <AdminRow k="Network" v={payment.network} />
+      <AdminRow k="Sender" v={payment.sender} />
+      <AdminRow k="Recipient" v={payment.recipient} />
+      <AdminRow k="Intent" v={payment.intentStatus ?? "—"} />
+      <AdminRow k="Message" v={payment.publicNumber ? formatPublicNumber(payment.publicNumber) : "unpublished"} />
+      <AdminRow k="When" v={payment.createdAt} />
+    </dl>
+  );
+}
+
 export function AdminPaymentsPanel({ initial }: { initial: AdminOverview }) {
   const [paymentQuery, setPaymentQuery] = useState("");
   const [payment, setPayment] = useState<AdminPaymentHit | null>(null);
+  const [miss, setMiss] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function lookupPayment(event: React.FormEvent) {
     event.preventDefault();
-    const res = await fetch(`/api/admin/payments?q=${encodeURIComponent(paymentQuery.trim())}`);
+    const q = paymentQuery.trim();
+    const res = await fetch(`/api/admin/payments?q=${encodeURIComponent(q)}`);
     const data = await res.json();
     if (!res.ok) {
       setError(data.recovery ?? data.error ?? "Payment lookup failed.");
@@ -20,12 +38,14 @@ export function AdminPaymentsPanel({ initial }: { initial: AdminOverview }) {
     }
     setError(null);
     setPayment(data.payment ?? null);
+    setMiss(Boolean(q) && !data.payment);
   }
 
   return (
     <div className="admin-stack">
       <AdminPageHeader kicker="Payments" title="One dollar, one sentence">
-        Look up a settlement by transaction hash. Wallets stay truncated.
+        There are no user accounts. Each $1 is one sentence. Look up a settlement by
+        message number or transaction hash. Wallets stay truncated.
       </AdminPageHeader>
       <AdminAlert error={error} />
 
@@ -34,7 +54,7 @@ export function AdminPaymentsPanel({ initial }: { initial: AdminOverview }) {
           <input
             value={paymentQuery}
             onChange={(e) => setPaymentQuery(e.target.value)}
-            placeholder="0x transaction hash"
+            placeholder="#000020 or 0x transaction hash"
             className="field flex-1 font-mono"
           />
           <button className="btn btn-line" type="submit">
@@ -42,19 +62,46 @@ export function AdminPaymentsPanel({ initial }: { initial: AdminOverview }) {
           </button>
         </form>
         {payment ? (
-          <dl className="admin-dl">
-            <AdminRow k="Tx" v={payment.transactionHash} />
-            <AdminRow k="Status" v={payment.status} />
-            <AdminRow k="Amount" v={`${payment.amount} ${payment.currency}`} />
-            <AdminRow k="Network" v={payment.network} />
-            <AdminRow k="Sender" v={payment.sender} />
-            <AdminRow k="Recipient" v={payment.recipient} />
-            <AdminRow k="Intent" v={payment.intentStatus ?? "—"} />
-            <AdminRow k="Message" v={payment.publicNumber ? formatPublicNumber(payment.publicNumber) : "unpublished"} />
-          </dl>
+          <PaymentDetail payment={payment} />
+        ) : miss ? (
+          <AdminEmpty>No payment for that number or hash. Demo seed sentences are not $1 publishes.</AdminEmpty>
         ) : (
-          <AdminEmpty>Paste a transaction hash. Wallets are truncated.</AdminEmpty>
+          <AdminEmpty>Paste a message number or transaction hash.</AdminEmpty>
         )}
+      </section>
+
+      <section className="admin-panel">
+        <h2 className="kicker">This Wall&apos;s payments</h2>
+        <ul className="admin-list">
+          {initial.recentPayments.length === 0 ? (
+            <AdminEmpty>
+              {initial.simulation
+                ? "No $1 publishes yet. Seed sentences on the wall have no payment record."
+                : "No settlements recorded."}
+            </AdminEmpty>
+          ) : null}
+          {initial.recentPayments.map((row) => (
+            <li key={row.transactionHash}>
+              <button
+                type="button"
+                className="admin-item w-full text-left"
+                onClick={() => {
+                  setPayment(row);
+                  setMiss(false);
+                  setPaymentQuery(row.publicNumber ? formatPublicNumber(row.publicNumber) : row.transactionHash);
+                }}
+              >
+                <p>
+                  {row.publicNumber ? formatPublicNumber(row.publicNumber) : "unpublished"} · {row.status} ·{" "}
+                  {row.amount} {row.currency}
+                </p>
+                <p className="admin-item-meta">
+                  {row.transactionHash} · {row.createdAt}
+                </p>
+              </button>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="admin-panel">

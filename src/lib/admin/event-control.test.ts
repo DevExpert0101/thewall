@@ -67,6 +67,20 @@ describe("admin wall control", () => {
     expect(event.remainingMinutes).toBeLessThanOrEqual(8);
   });
 
+  it("starts a living window when leftover form times already ended", async () => {
+    const event = await applyAdminEventControl({
+      action: "start",
+      title: "FRESH DAY",
+      durationMinutes: 10,
+      startsAt: "2026-08-16T12:00:00.000Z",
+      endsAt: "2026-08-16T12:10:00.000Z",
+    });
+    expect(event.phase).toBe("live");
+    expect(event.title).toBe("FRESH DAY");
+    expect(event.windowMinutes).toBe(10);
+    expect(Date.parse(event.endsAt)).toBeGreaterThan(Date.now());
+  });
+
   it("starts the next simulated day after a seal", async () => {
     closeSimulatedWall();
     const event = await applyAdminEventControl({

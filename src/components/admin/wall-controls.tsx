@@ -98,11 +98,11 @@ export function AdminWallControls({
         if (action === "start" || action === "openNext" || durationChanged) {
           body.durationMinutes = durationMinutes;
         }
-        if (remainingChanged) {
+        if (action === "save" && remainingChanged) {
           body.remainingMinutes = remainingMinutes;
-        } else if (timesChanged) {
+        } else if (action === "save" && timesChanged) {
           body.startsAt = fromLocalInput(startsLocal);
-          if (action === "save" && !durationChanged) {
+          if (!durationChanged) {
             body.endsAt = fromLocalInput(endsLocal);
           }
         }

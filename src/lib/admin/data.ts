@@ -5,7 +5,13 @@ import { listClaimAttempts } from "@/lib/ownership/claim";
 import { listReactionSignals, type ReactionSignal } from "@/lib/reactions/integrity";
 import { eventSlug, getEventOps, getEventSnapshot } from "@/lib/data/event";
 import { listSealedEditions } from "@/lib/data/editions";
-import { getSimulatedMessage, listSimulatedMessages } from "@/lib/data/simulation";
+import {
+  getSimulatedMessage,
+  listSimulatedMessages,
+  listSimulatedPaymentRecords,
+  lookupSimulatedPaymentRecord,
+  type SimulatedPaymentRecord,
+} from "@/lib/data/simulation";
 import { getNetwork, hasSupabaseConfig, isSimulation } from "@/lib/env";
 import { editionNumberOf, parsePublicNumber } from "@/lib/utils";
 import { createServiceSupabase } from "@/lib/supabase/admin";
@@ -206,14 +212,16 @@ export async function loadAdminOverview(): Promise<AdminOverview> {
   const opsFlags = await getEventOps();
   if (isSimulation() || !hasSupabaseConfig()) {
     const reactionSignals = await loadReactionSignals();
+    const recentPayments = listSimulatedPaymentRecords().map(toSimulatedPaymentHit);
     return {
       config: configPreviewFromEvent(event, opsFlags),
       totals: {
         messages: event.totalMessages,
         reactions: event.totalReactions,
-        usdc: 0,
+        usdc: recentPayments.filter((row) => row.status === "completed").length,
       },
       recentFailures: [],
+      recentPayments,
       openReports: [],
       flaggedMessages: [],
       reviewRanks: await loadReviewRanks(event.id),
@@ -314,6 +322,7 @@ export async function loadAdminOverview(): Promise<AdminOverview> {
       createdAt: row.created_at,
       transactionHash: row.transaction_hash,
     })),
+    recentPayments: await listLiveAdminPayments(event.id),
     openReports,
     flaggedMessages: (flagged.data ?? []).map((row) => ({
       id: row.id,
@@ -413,31 +422,37 @@ export async function searchAdminMessages(q: string): Promise<AdminMessageHit[]>
   return (data ?? []).map(toMessageHit);
 }
 
-export async function lookupAdminPayment(q: string): Promise<AdminPaymentHit | null> {
-  const db = createServiceSupabase();
-  const hash = q.trim().toLowerCase();
-  if (!/^0x[0-9a-f]{64}$/.test(hash)) return null;
+function toSimulatedPaymentHit(row: SimulatedPaymentRecord): AdminPaymentHit {
+  return {
+    transactionHash: row.paymentId,
+    amount: row.amount,
+    currency: row.currency,
+    network: row.network,
+    status: row.status === "fulfilled" ? "completed" : row.status,
+    verifiedAt: row.status === "fulfilled" ? row.createdAt : null,
+    createdAt: row.createdAt,
+    sender: "local",
+    recipient: truncateWallet(row.recipient),
+    intentStatus: row.status,
+    publicNumber: row.publicNumber,
+  };
+}
 
-  const { data: payment } = await db
-    .from("payments")
-    .select(
-      "transaction_hash, amount, currency, network, status, verified_at, sender_wallet, recipient_wallet, payment_intent_id",
-    )
-    .eq("transaction_hash", hash)
-    .maybeSingle();
-  if (!payment) return null;
-
-  const { data: intent } = await db
-    .from("payment_intents")
-    .select("id, status")
-    .eq("id", payment.payment_intent_id)
-    .maybeSingle();
-  const { data: message } = await db
-    .from("messages")
-    .select("public_number")
-    .eq("payment_intent_id", payment.payment_intent_id)
-    .maybeSingle();
-
+function toLivePaymentHit(
+  payment: {
+    transaction_hash: string;
+    amount: string | number;
+    currency: string;
+    network: string;
+    status: string;
+    verified_at: string | null;
+    created_at: string;
+    sender_wallet: string;
+    recipient_wallet: string;
+    payment_intent_id: string;
+  },
+  extras: { intentStatus: string | null; publicNumber: number | null },
+): AdminPaymentHit {
   return {
     transactionHash: payment.transaction_hash,
     amount: String(payment.amount),
@@ -445,11 +460,100 @@ export async function lookupAdminPayment(q: string): Promise<AdminPaymentHit | n
     network: payment.network,
     status: payment.status,
     verifiedAt: payment.verified_at,
+    createdAt: payment.created_at,
     sender: truncateWallet(payment.sender_wallet),
     recipient: truncateWallet(payment.recipient_wallet),
-    intentStatus: intent?.status ?? null,
-    publicNumber: message?.public_number ?? null,
+    intentStatus: extras.intentStatus,
+    publicNumber: extras.publicNumber,
   };
+}
+
+const PAYMENT_COLUMNS =
+  "transaction_hash, amount, currency, network, status, verified_at, created_at, sender_wallet, recipient_wallet, payment_intent_id";
+
+async function attachLivePaymentExtras(
+  rows: Array<{ payment_intent_id: string }>,
+): Promise<{
+  statusByIntent: Map<string, string>;
+  numberByIntent: Map<string, number>;
+}> {
+  const db = createServiceSupabase();
+  const intentIds = [...new Set(rows.map((row) => row.payment_intent_id))];
+  if (intentIds.length === 0) {
+    return { statusByIntent: new Map(), numberByIntent: new Map() };
+  }
+  const [{ data: intents }, { data: messages }] = await Promise.all([
+    db.from("payment_intents").select("id, status").in("id", intentIds),
+    db.from("messages").select("public_number, payment_intent_id").in("payment_intent_id", intentIds),
+  ]);
+  return {
+    statusByIntent: new Map((intents ?? []).map((row) => [row.id as string, row.status as string])),
+    numberByIntent: new Map(
+      (messages ?? []).map((row) => [row.payment_intent_id as string, row.public_number as number]),
+    ),
+  };
+}
+
+async function listLiveAdminPayments(_eventId: string): Promise<AdminPaymentHit[]> {
+  const db = createServiceSupabase();
+  const { data } = await db
+    .from("payments")
+    .select(PAYMENT_COLUMNS)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (!data?.length) return [];
+  const extras = await attachLivePaymentExtras(data);
+  return data.map((row) =>
+    toLivePaymentHit(row, {
+      intentStatus: extras.statusByIntent.get(row.payment_intent_id) ?? null,
+      publicNumber: extras.numberByIntent.get(row.payment_intent_id) ?? null,
+    }),
+  );
+}
+
+export async function lookupAdminPayment(q: string): Promise<AdminPaymentHit | null> {
+  if (isSimulation() || !hasSupabaseConfig()) {
+    const row = lookupSimulatedPaymentRecord(q);
+    return row ? toSimulatedPaymentHit(row) : null;
+  }
+
+  const db = createServiceSupabase();
+  const hash = q.trim().toLowerCase();
+  const n = parsePublicNumber(q);
+
+  if (/^0x[0-9a-f]{64}$/.test(hash)) {
+    const { data: payment } = await db.from("payments").select(PAYMENT_COLUMNS).eq("transaction_hash", hash).maybeSingle();
+    if (!payment) return null;
+    const extras = await attachLivePaymentExtras([payment]);
+    return toLivePaymentHit(payment, {
+      intentStatus: extras.statusByIntent.get(payment.payment_intent_id) ?? null,
+      publicNumber: extras.numberByIntent.get(payment.payment_intent_id) ?? null,
+    });
+  }
+
+  if (n) {
+    const event = await getEventSnapshot(eventSlug());
+    const { data: message } = await db
+      .from("messages")
+      .select("payment_intent_id, public_number")
+      .eq("event_id", event.id)
+      .eq("public_number", n)
+      .maybeSingle();
+    if (!message) return null;
+    const { data: payment } = await db
+      .from("payments")
+      .select(PAYMENT_COLUMNS)
+      .eq("payment_intent_id", message.payment_intent_id)
+      .maybeSingle();
+    if (!payment) return null;
+    const extras = await attachLivePaymentExtras([payment]);
+    return toLivePaymentHit(payment, {
+      intentStatus: extras.statusByIntent.get(payment.payment_intent_id) ?? null,
+      publicNumber: message.public_number,
+    });
+  }
+
+  return null;
 }
 
 export async function listAdminReports(): Promise<AdminReportRow[]> {
