@@ -19,4 +19,5 @@ function run(command, args) {
 }
 
 run("npx", ["vitest", "run", "src/lib/testing"]);
+run("npx", ["vitest", "run", "src/lib/payment", "src/lib/security", "src/lib/admin/security.test.ts"]);
 run("node", ["scripts/verify-migrations.mjs"]);

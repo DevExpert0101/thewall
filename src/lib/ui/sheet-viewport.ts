@@ -25,17 +25,15 @@ export function useSheetBox(active: boolean): SheetBox | null {
   const [box, setBox] = useState<SheetBox | null>(null);
 
   useEffect(() => {
-    if (!active) {
-      setBox(null);
-      return;
-    }
+    if (!active) return;
     const sync = () => setBox(readSheetBox());
-    sync();
+    const frame = window.requestAnimationFrame(sync);
     const vv = window.visualViewport;
     vv?.addEventListener("resize", sync);
     vv?.addEventListener("scroll", sync);
     window.addEventListener("resize", sync);
     return () => {
+      window.cancelAnimationFrame(frame);
       vv?.removeEventListener("resize", sync);
       vv?.removeEventListener("scroll", sync);
       window.removeEventListener("resize", sync);

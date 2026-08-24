@@ -27,4 +27,11 @@ describe("message normalization", () => {
     const text = "a".repeat(139) + "🔥";
     expect(validateMessage(text)).toBe(text);
   });
+
+  it("accepts one character, RTL, and a long unbroken token", () => {
+    expect(validateMessage("א")).toBe("א");
+    expect(validateMessage("جملة قصيرة")).toBe("جملة قصيرة");
+    expect(validateMessage("x".repeat(139))).toHaveLength(139);
+    expect(validateMessage(`https://example.test/${"a".repeat(80)}`)).toContain("example.test");
+  });
 });

@@ -118,13 +118,13 @@ export default async function HomePage() {
           refused or removed. Reports are private. Administrators act through an
           audited panel. Public anonymity is not a license to harm.
         </p>
-        <div className="mt-10">
-            <Link href={event.phase === "archived" ? "/archive" : "/watch"} className="btn btn-line">
+        <div className="mt-10 flex flex-wrap gap-3">
+          <Link href={event.phase === "archived" ? "/archive" : "/watch"} className="btn btn-line">
             {event.phase === "archived" ? "Enter the Archive" : "Watch the Wall"}
           </Link>
-            <Link href="/monument" className="btn btn-line">
-              Visit the Monument
-            </Link>
+          <Link href="/monument" className="btn btn-line">
+            Visit the Monument
+          </Link>
         </div>
       </section>
 

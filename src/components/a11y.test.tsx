@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -23,6 +23,27 @@ describe("keyboard access", () => {
     await user.tab();
     await user.keyboard("{Enter}");
     expect(clicked).toBe(true);
+  });
+
+  it("activates the fire control with Space", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ reactionCount: 5 }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      ),
+    );
+    render(<FireButton messageId="00000000-0000-4000-8000-0000000000aa" count={4} />);
+    const button = screen.getByRole("button", { name: /react with fire/i });
+    button.focus();
+    await user.keyboard(" ");
+    await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "true"));
+    vi.unstubAllGlobals();
   });
 
   it("can open FAQ items from the keyboard", async () => {
@@ -125,7 +146,7 @@ describe("share and watch", () => {
 
 describe("reaction and composer labels", () => {
   it("names the fire control for assistive tech", () => {
-    render(<FireButton messageId="00000000-0000-4000-8000-000000000001" count={4} />);
+    render(<FireButton messageId="00000000-0000-4000-8000-0000000000bb" count={4} />);
     const button = screen.getByRole("button", { name: /react with fire/i });
     expect(button).toHaveAttribute("aria-pressed", "false");
   });
