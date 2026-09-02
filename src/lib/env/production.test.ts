@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { TURNSTILE_DUMMY } from "@/lib/abuse/turnstile";
 import {
+  assertPaidSurfaceConfigured,
   assertProductionEnv,
   evaluateProductionEnv,
   isDummyTurnstile,
+  isHostedDeploy,
   isNextProductionBuild,
   isVercelProduction,
 } from "@/lib/env/production";
@@ -70,5 +72,58 @@ describe("production environment contract", () => {
         NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
       }),
     ).toThrow(AppError);
+  });
+
+  it("does not treat local next dev as a hosted deploy", () => {
+    expect(
+      isHostedDeploy({
+        NODE_ENV: "development",
+        NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
+      }),
+    ).toBe(false);
+    expect(
+      isHostedDeploy({
+        NODE_ENV: "production",
+        NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
+      }),
+    ).toBe(false);
+  });
+
+  it("treats Vercel preview and a public production URL as hosted", () => {
+    expect(isHostedDeploy({ VERCEL: "1", VERCEL_ENV: "preview" })).toBe(true);
+    expect(
+      isHostedDeploy({
+        NODE_ENV: "production",
+        NEXT_PUBLIC_SITE_URL: "https://thewall.example",
+      }),
+    ).toBe(true);
+  });
+
+  it("blocks a $1 on a hosted deploy with a zero treasury", () => {
+    expect(() =>
+      assertPaidSurfaceConfigured({
+        VERCEL: "1",
+        VERCEL_ENV: "preview",
+        NEXT_PUBLIC_SITE_URL: "https://thewall.example",
+        NEXT_PUBLIC_SUPABASE_URL: "https://abc.supabase.co",
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key-value",
+        SUPABASE_SERVICE_ROLE_KEY: "service-role-key-value-20",
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: "live-site-key",
+        TURNSTILE_SECRET_KEY: "live-secret-key",
+        NEXT_PUBLIC_BASE_NETWORK: "base-sepolia",
+        BASE_NETWORK: "base-sepolia",
+        NEXT_PUBLIC_TREASURY_ADDRESS: "0x0000000000000000000000000000000000000000",
+        NEXT_PUBLIC_SIMULATE_LIVE: "false",
+        ADMIN_EMAILS: "ops@example.com",
+      }),
+    ).toThrow(AppError);
+    expect(() =>
+      assertPaidSurfaceConfigured({
+        NODE_ENV: "development",
+        NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
+        NEXT_PUBLIC_TREASURY_ADDRESS: "0x0000000000000000000000000000000000000000",
+        NEXT_PUBLIC_SIMULATE_LIVE: "true",
+      }),
+    ).not.toThrow();
   });
 });

@@ -14,6 +14,8 @@ export type EventTimestamps = {
   endsAt: string;
   archivedAt: string | null;
   finalizedAt: string | null;
+  /** Sticky close-for-review. Clock rollback cannot reopen writes. */
+  reviewClosedAt?: string | null;
 };
 
 /**
@@ -36,6 +38,7 @@ export function deriveEventPhase(
 
   if (archivedAt !== null && t >= archivedAt) return "archived";
   if (finalizedAt !== null && t >= endsAt) return "archived";
+  if (timestamps.reviewClosedAt) return "finalizing";
   if (t < startsAt) return "upcoming";
   if (t < endsAt) return "live";
   return "finalizing";
@@ -145,9 +148,12 @@ export function reconcilePublicPhase(input: {
 
 /** Phase plus ends_at. Delayed packets cannot publish after the server deadline. */
 export function assertWritesOpen(
-  event: { phase: EventPhase; endsAt: string },
+  event: { phase: EventPhase; endsAt: string; reviewClosedAt?: string | null },
   now: Date = new Date(),
 ): void {
+  if (event.reviewClosedAt) {
+    throw new AppError(ERROR_CODES.EVENT_ENDED, "The Wall has closed.", 403);
+  }
   assertEventLive(event.phase);
   if (new Date(event.endsAt).getTime() <= now.getTime()) {
     throw new AppError(ERROR_CODES.EVENT_ENDED, "The Wall has closed.", 403);

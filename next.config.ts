@@ -37,7 +37,6 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
-      { source: "/live", destination: "/watch", permanent: false },
       { source: "/opening", destination: "/open", permanent: false },
       { source: "/invite", destination: "/open?from=invite", permanent: false },
     ];
@@ -81,6 +80,10 @@ const nextConfig: NextConfig = {
           { key: "X-Robots-Tag", value: "noindex, nofollow" },
           { key: "Cache-Control", value: "private, no-store" },
         ],
+      },
+      {
+        source: "/live",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
       {
         source: "/watch/stream",

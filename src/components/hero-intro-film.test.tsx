@@ -7,7 +7,7 @@ describe("hero intro film", () => {
     const onDone = vi.fn();
     const { container } = render(<HeroIntroFilm onDone={onDone} />);
     const video = container.querySelector("video");
-    expect(video?.getAttribute("poster")).toBe("/hero-wall.png");
+    expect(video?.getAttribute("poster")).toBe("/hero-wall-poster.jpg");
     expect(container.querySelector("source")?.getAttribute("src")).toBe("/hero-wall.mp4");
     expect(video?.hasAttribute("loop")).toBe(false);
     video?.dispatchEvent(new Event("ended"));

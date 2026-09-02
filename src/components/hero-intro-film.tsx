@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 
-const INTRO_FALLBACK_MS = 16_000;
+const INTRO_FALLBACK_MS = 8_000;
 
 export function HeroIntroFilm({ onDone }: { onDone: () => void }) {
   const finished = useRef(false);
@@ -30,8 +30,9 @@ export function HeroIntroFilm({ onDone }: { onDone: () => void }) {
       autoPlay
       muted
       playsInline
+      preload="auto"
       disablePictureInPicture
-      poster="/hero-wall.png"
+      poster="/hero-wall-poster.jpg"
       onEnded={finish}
       onError={finish}
     >

@@ -310,9 +310,13 @@ export async function applyAdminEventControl(
       throw new AppError(ERROR_CODES.EVENT_UPCOMING, "This Wall has not opened yet.", 409);
     }
     if (event.phase === "live") {
+      const endsAt = new Date(Math.min(Date.parse(event.endsAt), now.getTime())).toISOString();
       const { error } = await db
         .from("events")
-        .update({ ends_at: nowIso })
+        .update({
+          ends_at: endsAt,
+          review_closed_at: event.reviewClosedAt ?? nowIso,
+        })
         .eq("id", event.id);
       if (error) {
         throw new AppError(ERROR_CODES.UNAVAILABLE, "Could not finish this Wall.", 503);

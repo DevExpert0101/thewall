@@ -2,7 +2,13 @@ import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSyn
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { resolveMessageSort, type AcceptedSort, type FeedbackCategory, type MessageSort } from "@/lib/constants";
-import { ARCHIVAL_REMOVAL_TEXT, ARCHIVAL_TAGLINE, PAYMENT_INTENT_TTL_SECONDS, PRICE_USDC } from "@/lib/constants";
+import {
+  ARCHIVAL_REMOVAL_TEXT,
+  ARCHIVAL_TAGLINE,
+  PAYMENT_INTENT_TTL_SECONDS,
+  PRICE_USDC,
+  REVIEW_HOLD_TEXT,
+} from "@/lib/constants";
 import { createWallKey, hashOwnershipSecret, hashWallKey, sha256Hex, tokensEqual } from "@/lib/crypto";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { getNetwork, getTreasuryAddress, isArchiveSimulation } from "@/lib/env";
@@ -107,6 +113,7 @@ const intents = new Map<string, SimIntent>();
 let archiveSnapshot: SimulatedArchive | null = null;
 const sealedEditions: SimulatedArchive[] = [];
 let closedOverride: boolean | null = null;
+let reviewOverride = false;
 let endsAtOverride: string | null = null;
 let startsAtOverride: string | null = null;
 let titleOverride: string | null = null;
@@ -168,10 +175,12 @@ type PersistedState = {
   ops?: EventOpsControls;
   opsAudit?: SimulatedOpsAudit[];
   seedModeration?: [number, "removed" | "approved"][];
+  reviewClosed?: boolean;
 };
 
 function applyPersisted(raw: PersistedState) {
   closedOverride = raw.closed ?? null;
+  reviewOverride = raw.reviewClosed === true;
   endsAtOverride = raw.endsAt ?? null;
   startsAtOverride = raw.startsAt ?? null;
   titleOverride = raw.title ?? null;
@@ -242,6 +251,7 @@ function persist() {
       path,
       JSON.stringify({
         closed: closedOverride,
+        reviewClosed: reviewOverride,
         writes: extraWrites,
         intents: [...intents.values()],
         fires: [...extraFires.entries()],
@@ -281,6 +291,7 @@ function clearLiveSimulation() {
   intents.clear();
   archiveSnapshot = null;
   closedOverride = null;
+  reviewOverride = false;
   endsAtOverride = null;
   startsAtOverride = null;
 }
@@ -349,6 +360,7 @@ function liveEndsAt(now: Date): string {
 function isSimulatedWallExpired(now: Date = new Date()) {
   ensureLoaded();
   if (!isSimulatedWallStarted() || isSimulatedWallClosed()) return false;
+  if (reviewOverride) return true;
   return Date.parse(liveEndsAt(now)) <= now.getTime();
 }
 
@@ -610,7 +622,7 @@ export function configureSimulatedWall(input: SimulatedWallConfig) {
     }
   }
   if (input.remainingMinutes !== undefined) {
-    if (isSimulatedWallClosed()) {
+    if (isSimulatedWallClosed() || reviewOverride) {
       throw new AppError(ERROR_CODES.EVENT_ENDED, "The Wall has closed.", 403);
     }
     if (!isSimulatedWallStarted()) {
@@ -627,6 +639,7 @@ export function holdSimulatedWall() {
   ensureLoaded();
   startedOverride = false;
   closedOverride = false;
+  reviewOverride = false;
   archiveSnapshot = null;
   endsAtOverride = null;
   startsAtOverride = null;
@@ -658,6 +671,7 @@ export function startSimulatedWall(input: SimulatedWallConfig = {}) {
     intents.clear();
     archiveSnapshot = null;
     closedOverride = false;
+    reviewOverride = false;
   }
   startedOverride = true;
   const windowMs = windowLengthMs();
@@ -682,7 +696,12 @@ export function expireSimulatedWall(now: Date = new Date()) {
   if (!isSimulatedWallStarted()) {
     throw new AppError(ERROR_CODES.EVENT_UPCOMING, "The Wall has not opened yet.", 409);
   }
-  endsAtOverride = now.toISOString();
+  const currentEnds = Date.parse(liveEndsAt(now));
+  if (!reviewOverride) {
+    const closeAt = Number.isFinite(currentEnds) ? Math.min(currentEnds, now.getTime()) : now.getTime();
+    endsAtOverride = new Date(closeAt).toISOString();
+    reviewOverride = true;
+  }
   persist();
   return currentSimulatedEvent(now);
 }
@@ -698,6 +717,30 @@ export function hurrySimulatedClock(ms: number = SIMULATION_HURRY_MS) {
 function seedIsRemoved(seed: Seed): boolean {
   const overlay = seedModeration.get(seed.n);
   return overlay === "removed" || (overlay !== "approved" && Boolean(seed.removed));
+}
+
+export function listSimulatedHeldMessages(): {
+  id: string;
+  publicNumber: number;
+  text: string;
+  moderationStatus: "flagged";
+}[] {
+  ensureLoaded();
+  return extraWrites
+    .filter((row) => !row.removed && row.moderationStatus === "flagged")
+    .map((row) => ({
+      id: messageId(row.publicNumber),
+      publicNumber: row.publicNumber,
+      text: row.text,
+      moderationStatus: "flagged" as const,
+    }));
+}
+
+export function simulatedAdminText(publicNumber: number): string {
+  ensureLoaded();
+  const write = extraWrites.find((row) => row.publicNumber === publicNumber);
+  if (write) return write.removed ? ARCHIVAL_REMOVAL_TEXT : write.text;
+  return originalSimulatedText(publicNumber);
 }
 
 export function simulatedTextAlreadyPublished(text: string): boolean {
@@ -817,7 +860,8 @@ export function simulatedLiveEvent(now: Date = new Date()): EventSnapshot {
     endsAt: window.endsAt,
     archivedAt: null,
     finalizedAt: null,
-    phase: untilStart > 0 ? "upcoming" : remaining <= 0 ? "finalizing" : "live",
+    reviewClosedAt: reviewOverride ? window.endsAt : null,
+    phase: untilStart > 0 ? "upcoming" : reviewOverride || remaining <= 0 ? "finalizing" : "live",
     serverNow: now.toISOString(),
     totalMessages: messages.length,
     totalReactions: messages.reduce((sum, message) => sum + message.reactionCount, 0),
@@ -899,12 +943,14 @@ export function simulatedMessageList(
   const published = extraWrites.map((write) => {
     const id = messageId(write.publicNumber);
     const isRemoved = Boolean(write.removed);
+    const isHeld = !isRemoved && write.moderationStatus === "flagged";
     return {
       id,
       eventId: SIMULATION_EVENT_ID,
       publicNumber: write.publicNumber,
-      text: isRemoved ? ARCHIVAL_REMOVAL_TEXT : write.text,
+      text: isRemoved ? ARCHIVAL_REMOVAL_TEXT : isHeld ? REVIEW_HOLD_TEXT : write.text,
       isRemoved,
+      isHeld,
       reactionCount: write.fires + (extraFires.get(id) ?? 0),
       publishedAt: extraPublishedAt(write, anchor, now),
       finalRank: null as number | null,
@@ -978,12 +1024,13 @@ export function listSimulatedMessages(input: {
           finalized,
         });
   const endsAt = input.endsAt ?? edition?.event.endsAt ?? currentSimulatedEvent(now).endsAt;
-  let ordered = all;
+  const visible = all.filter((message) => message.isHeld !== true);
+  let ordered = visible;
 
   if (sort === "new") {
-    ordered = [...all].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || b.publicNumber - a.publicNumber);
+    ordered = [...visible].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || b.publicNumber - a.publicNumber);
   } else if (sort === "hot") {
-    ordered = [...all].sort(
+    ordered = [...visible].sort(
       (a, b) =>
         b.reactionCount - a.reactionCount ||
         a.publishedAt.localeCompare(b.publishedAt) ||
@@ -991,16 +1038,15 @@ export function listSimulatedMessages(input: {
     );
   } else if (sort === "rising") {
     const byNumber = new Map(SEEDS.map((seed) => [seed.n, seed]));
-    const scored = all
+    const scored = visible
       .map((message) => {
         const seed = byNumber.get(message.publicNumber);
         const extra = extraFires.get(message.id) ?? 0;
         const hourCount = (seed?.hourFires ?? 0) + extra;
-        const ageMinutes = Math.max(1, Math.ceil((now.getTime() - Date.parse(message.publishedAt)) / 60_000));
-        const recordedMinutes = (seed?.hourMinutes ?? 0) + extra;
+        const recordedMinutes = seed?.hourMinutes ?? 0;
         const hourMinutes = Math.min(
           60,
-          recordedMinutes > 0 ? recordedMinutes : hourCount > 0 ? Math.min(hourCount, ageMinutes) : 0,
+          recordedMinutes > 0 ? recordedMinutes : hourCount > 0 ? 1 : 0,
         );
         return { message, hourCount, hourMinutes };
       })
@@ -1028,15 +1074,15 @@ export function listSimulatedMessages(input: {
               ),
             )
             .map((row) => row.message)
-        : [...all].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+        : [...visible].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
   } else if (sort === "random") {
-    const picked = pickFromList(all, [], input.limit);
+    const picked = pickFromList(visible, [], input.limit);
     ordered = picked.messages;
   } else if (sort === "gems") {
     const gemNow = Date.parse(endsAt) <= now.getTime() ? new Date(endsAt) : now;
-    ordered = selectHiddenGems(all, gemNow);
+    ordered = selectHiddenGems(visible, gemNow);
   } else if (sort === "final") {
-    ordered = [...all]
+    ordered = [...visible]
       .filter((message) => inFinalHour(message.publishedAt, endsAt))
       .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || b.publicNumber - a.publicNumber);
   }
@@ -1076,7 +1122,7 @@ export function addSimulatedReaction(
 ): number {
   assertSimulatedWallWritable(now);
   const message = simulatedMessageList().find((row) => row.id === messageId);
-  if (!message || message.isRemoved) {
+  if (!message || message.isRemoved || message.isHeld) {
     throw new AppError(ERROR_CODES.MESSAGE_NOT_FOUND, "Message not found.", 404);
   }
   if (idempotencyKey) {
@@ -1154,18 +1200,33 @@ export function moderateSimulatedMessage(input: {
       throw new AppError(ERROR_CODES.MESSAGE_NOT_FOUND, "Message not found.", 404);
     }
     write.removed = remove;
+    if (!remove) write.moderationStatus = "approved";
   }
   const next: PublicMessage = {
     ...message,
     isRemoved: remove,
+    isHeld: false,
     text: remove ? ARCHIVAL_REMOVAL_TEXT : originalSimulatedText(message.publicNumber),
   };
   if (archiveSnapshot) patchSimulatedArchiveMessage(archiveSnapshot.messages, next);
   for (const edition of sealedEditions) {
     patchSimulatedArchiveMessage(edition.messages, next);
   }
+  resealSimulatedArchives();
   persist();
   return { publicNumber: message.publicNumber, action: input.action };
+}
+
+/** After Finish, redaction keeps ranks and 🔥; the stored hash must match the redacted ledger. */
+function resealSimulatedArchives() {
+  if (sealedEditions.length === 0 && !archiveSnapshot) return;
+  const nextEditions = sealedEditions.map((row) => sealSimulatedArchive(row));
+  sealedEditions.splice(0, sealedEditions.length, ...nextEditions);
+  if (!archiveSnapshot) return;
+  const editionNumber = editionNumberOf(archiveSnapshot.event);
+  archiveSnapshot =
+    sealedEditions.find((row) => editionNumberOf(row.event) === editionNumber) ??
+    sealSimulatedArchive(archiveSnapshot);
 }
 
 export function isSimulationEvent(eventId: string): boolean {
@@ -1184,11 +1245,17 @@ export function assertNotSimulatedInProduction(eventId: string): void {
   );
 }
 
+function configuredTreasury(): `0x${string}` | null {
+  const raw = process.env.BASE_TREASURY_ADDRESS || process.env.NEXT_PUBLIC_TREASURY_ADDRESS;
+  if (!raw || !/^0x[a-fA-F0-9]{40}$/.test(raw.trim())) return null;
+  return raw.trim().toLowerCase() as `0x${string}`;
+}
+
 function simulationRecipient(): `0x${string}` {
   try {
     return getTreasuryAddress();
   } catch {
-    return SIM_TREASURY;
+    return configuredTreasury() ?? SIM_TREASURY;
   }
 }
 

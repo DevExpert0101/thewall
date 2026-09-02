@@ -112,7 +112,7 @@ export function AdminDashboard({
           <Link href="/invite" className="admin-chip">
             Invite
           </Link>
-          <Link href="/watch/stream" className="admin-chip">
+          <Link href="/live" className="admin-chip">
             Stream mode
           </Link>
           <Link href="/archive" className="admin-chip">

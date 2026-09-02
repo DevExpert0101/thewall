@@ -1,4 +1,11 @@
-import { ARCHIVAL_REMOVAL_TEXT, resolveMessageSort, type AcceptedSort, type MessageSort } from "@/lib/constants";
+import {
+  ARCHIVAL_REMOVAL_TEXT,
+  REVIEW_HOLD_TEXT,
+  resolveMessageSort,
+  type AcceptedSort,
+  type MessageSort,
+} from "@/lib/constants";
+import { isHeldStatus } from "@/lib/moderation/visibility";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { isSimulation } from "@/lib/env";
 import {
@@ -31,16 +38,19 @@ type MessageRow = {
   published_at: string;
   final_rank: number | null;
   removed_at: string | null;
+  moderation_status?: string | null;
 };
 
 function toPublic(row: MessageRow): PublicMessage {
   const removed = Boolean(row.removed_at);
+  const held = !removed && isHeldStatus(row.moderation_status);
   return {
     id: row.id,
     eventId: row.event_id,
     publicNumber: row.public_number,
-    text: removed ? ARCHIVAL_REMOVAL_TEXT : row.text,
+    text: removed ? ARCHIVAL_REMOVAL_TEXT : held ? REVIEW_HOLD_TEXT : row.text,
     isRemoved: removed,
+    isHeld: held,
     reactionCount: row.reaction_count,
     publishedAt: row.published_at,
     finalRank: row.final_rank,
@@ -48,7 +58,15 @@ function toPublic(row: MessageRow): PublicMessage {
 }
 
 const PUBLIC_COLUMNS =
-  "id, event_id, public_number, text, reaction_count, published_at, final_rank, removed_at";
+  "id, event_id, public_number, text, reaction_count, published_at, final_rank, removed_at, moderation_status";
+
+function excludeHeld<T>(query: T): T {
+  return (query as { not: (col: string, op: string, value: string) => T }).not(
+    "moderation_status",
+    "in",
+    "(flagged,pending)",
+  );
+}
 
 export async function getMessageByNumber(
   eventId: string,
@@ -112,10 +130,12 @@ export async function listMessages(input: {
   }
 
   if (sort === "new") {
-    let query = db
-      .from("messages")
-      .select(PUBLIC_COLUMNS)
-      .eq("event_id", input.eventId)
+    let query = excludeHeld(
+      db
+        .from("messages")
+        .select(PUBLIC_COLUMNS)
+        .eq("event_id", input.eventId),
+    )
       .order("published_at", { ascending: false })
       .order("public_number", { ascending: false });
     const cursorNumber = input.cursor ? Number.parseInt(input.cursor, 10) : Number.NaN;
@@ -136,10 +156,9 @@ export async function listMessages(input: {
   }
 
   const offset = offsetFromCursor(input.cursor);
-  const { data, error } = await db
-    .from("messages")
-    .select(PUBLIC_COLUMNS)
-    .eq("event_id", input.eventId)
+  const { data, error } = await excludeHeld(
+    db.from("messages").select(PUBLIC_COLUMNS).eq("event_id", input.eventId),
+  )
     .order("reaction_count", { ascending: false })
     .order("published_at", { ascending: true })
     .order("public_number", { ascending: true })
@@ -177,20 +196,17 @@ async function loadRisingWindow(eventId: string): Promise<PublicMessage[]> {
   const topIds = [...stats.keys()];
 
   if (topIds.length === 0) {
-    const { data } = await db
-      .from("messages")
-      .select(PUBLIC_COLUMNS)
-      .eq("event_id", eventId)
+    const { data } = await excludeHeld(
+      db.from("messages").select(PUBLIC_COLUMNS).eq("event_id", eventId),
+    )
       .order("published_at", { ascending: false })
       .limit(WALL_TRENDING_WINDOW);
     return ((data as MessageRow[]) ?? []).map(toPublic);
   }
 
-  const { data, error } = await db
-    .from("messages")
-    .select(PUBLIC_COLUMNS)
-    .eq("event_id", eventId)
-    .in("id", topIds);
+  const { data, error } = await excludeHeld(
+    db.from("messages").select(PUBLIC_COLUMNS).eq("event_id", eventId).in("id", topIds),
+  );
 
   if (error) {
     throw new AppError(ERROR_CODES.UNAVAILABLE, "Messages could not be loaded.", 503);
@@ -243,11 +259,9 @@ function gemNow(now: Date | undefined, endsAt?: string): Date {
 
 async function loadGemsWindow(eventId: string, now?: Date, endsAt?: string): Promise<PublicMessage[]> {
   const db = createServiceSupabase();
-  const { data, error } = await db
-    .from("messages")
-    .select(PUBLIC_COLUMNS)
-    .eq("event_id", eventId)
-    .gte("reaction_count", 1)
+  const { data, error } = await excludeHeld(
+    db.from("messages").select(PUBLIC_COLUMNS).eq("event_id", eventId).gte("reaction_count", 1),
+  )
     .order("reaction_count", { ascending: false })
     .limit(WALL_TRENDING_WINDOW);
   if (error) {
@@ -287,12 +301,14 @@ async function listFinalHour(
   if (!endsAt) {
     return { messages: [], nextCursor: null };
   }
-  let query = db
-    .from("messages")
-    .select(PUBLIC_COLUMNS)
-    .eq("event_id", eventId)
-    .gte("published_at", finalHourStart(endsAt))
-    .lte("published_at", endsAt)
+  let query = excludeHeld(
+    db
+      .from("messages")
+      .select(PUBLIC_COLUMNS)
+      .eq("event_id", eventId)
+      .gte("published_at", finalHourStart(endsAt))
+      .lte("published_at", endsAt),
+  )
     .order("published_at", { ascending: false })
     .order("public_number", { ascending: false });
   const cursorNumber = cursor ? Number.parseInt(cursor, 10) : Number.NaN;
@@ -356,15 +372,17 @@ export async function pickRandomMessages(input: {
       random: input.random,
     });
     if (numbers.length === 0) break;
-    const { data, error } = await db
-      .from("messages")
-      .select(PUBLIC_COLUMNS)
-      .eq("event_id", input.eventId)
-      .in("public_number", numbers);
+    const { data, error } = await excludeHeld(
+      db
+        .from("messages")
+        .select(PUBLIC_COLUMNS)
+        .eq("event_id", input.eventId)
+        .in("public_number", numbers),
+    );
     if (error) {
       throw new AppError(ERROR_CODES.UNAVAILABLE, "Messages could not be loaded.", 503);
     }
-    const rows = ((data as MessageRow[]) ?? []).map(toPublic);
+    const rows = ((data as MessageRow[]) ?? []).map(toPublic).filter((message) => message.isHeld !== true);
     found.push(...rows);
     blocked.push(...numbers);
   }
@@ -454,6 +472,7 @@ export async function searchPublicMessages(
     .from("public_messages")
     .select(PUBLIC_COLUMNS)
     .eq("event_id", eventId)
+    .not("moderation_status", "in", "(flagged,pending)")
     .ilike("text", `%${escaped}%`)
     .order("published_at", { ascending: false })
     .limit(SEARCH_RESULT_LIMIT);
@@ -465,7 +484,7 @@ export async function searchPublicMessages(
 
 export async function listLiveSurface(eventId: string): Promise<PublicMessage[]> {
   if (isSimulation() || isSimulationEvent(eventId)) {
-    return simulatedMessageList();
+    return simulatedMessageList().filter((message) => message.isHeld !== true);
   }
   const db = createServiceSupabase();
   const collected: PublicMessage[] = [];
@@ -473,10 +492,9 @@ export async function listLiveSurface(eventId: string): Promise<PublicMessage[]>
   let from = 0;
   while (collected.length < WALL_SURFACE_MAX) {
     const to = Math.min(from + page - 1, WALL_SURFACE_MAX - 1);
-    const { data, error } = await db
-      .from("messages")
-      .select(PUBLIC_COLUMNS)
-      .eq("event_id", eventId)
+    const { data, error } = await excludeHeld(
+      db.from("messages").select(PUBLIC_COLUMNS).eq("event_id", eventId),
+    )
       .order("public_number", { ascending: true })
       .range(from, to);
     if (error) {

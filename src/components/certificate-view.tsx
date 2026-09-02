@@ -1,5 +1,6 @@
 "use client";
 
+import { CertificateQr } from "@/components/certificate-qr";
 import { SharePanel } from "@/components/share-panel";
 import { publicCertificateImagePath } from "@/lib/certificate/public";
 import { ARCHIVAL_REMOVAL_TEXT } from "@/lib/constants";
@@ -64,15 +65,18 @@ export function CertificateView({ data }: { data: CertificatePayload }) {
               : "The seal is recorded when this Wall is finished."}
           </p>
         </div>
-        <footer>
-          {typeof data.totalMessages === "number" ? (
-            <p className="mb-4 font-mono text-xs tracking-[0.14em] text-mist print:text-neutral-700">
-              {formatCount(data.totalMessages)} people spoke that day. This was one of them.
+        <footer className="certificate-close">
+          <div>
+            {typeof data.totalMessages === "number" ? (
+              <p className="mb-4 font-mono text-xs tracking-[0.14em] text-mist print:text-neutral-700">
+                {formatCount(data.totalMessages)} people spoke that day. This was one of them.
+              </p>
+            ) : null}
+            <p className="certificate-colophon print:text-neutral-700">
+              {formatObjectIdentity(data.publicNumber, data.editionNumber)}
             </p>
-          ) : null}
-          <p className="certificate-colophon print:text-neutral-700">
-            {formatObjectIdentity(data.publicNumber, data.editionNumber)}
-          </p>
+          </div>
+          <CertificateQr publicNumber={data.publicNumber} />
         </footer>
       </article>
       <div className="certificate-tools mx-auto mt-8 max-w-3xl print:hidden">

@@ -50,7 +50,7 @@ describe("waiting room", () => {
     expect(screen.getByText(/no sentences have been carved/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /remind me/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /watch the wall/i })).toHaveAttribute("href", "/watch");
-    expect(screen.getByRole("link", { name: /stream mode/i })).toHaveAttribute("href", "/watch/stream");
+    expect(screen.getByRole("link", { name: /stream mode/i })).toHaveAttribute("href", "/live");
     expect(screen.getByRole("button", { name: /share the opening/i })).toBeInTheDocument();
     expect(screen.queryByText(/viewers/i)).not.toBeInTheDocument();
   });

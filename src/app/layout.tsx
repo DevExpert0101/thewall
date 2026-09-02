@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { Cinzel, Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+import { Cinzel, Geist, Geist_Mono, Newsreader } from "next/font/google";
 import { SiteShell } from "@/components/site-shell";
 import { APP_NAME, SUPPORTING_COPY, TAGLINE } from "@/lib/constants";
 import { isSimulation } from "@/lib/env";
 import { THEME_BOOT_SCRIPT } from "@/lib/design/theme";
-import { colors, DEFAULT_THEME } from "@/lib/design/tokens";
+import { colors, DEFAULT_THEME, themes } from "@/lib/design/tokens";
 import { siteUrl } from "@/lib/utils";
 import "./globals.css";
 
@@ -21,10 +21,11 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
-const instrument = Instrument_Serif({
+const display = Newsreader({
   variable: "--font-instrument",
   subsets: ["latin"],
-  weight: "400",
+  weight: ["400", "500", "600"],
+  style: ["normal", "italic"],
   display: "swap",
 });
 
@@ -72,9 +73,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       data-theme={DEFAULT_THEME}
+      data-scheme={themes[DEFAULT_THEME].scheme}
       data-scroll-behavior="smooth"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${instrument.variable} ${cinzel.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${display.variable} ${cinzel.variable} h-full antialiased`}
     >
       <head>
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />

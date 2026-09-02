@@ -1,8 +1,9 @@
 import { protectAnonymousWrite } from "@/lib/abuse/protect";
 import { mapPublishError } from "@/lib/data/rate-limit";
-import { eventSlug, getEventSnapshot } from "@/lib/data/event";
+import { eventSlug, getEventSnapshot, loadEventSnapshot } from "@/lib/data/event";
 import { assertNotSimulatedInProduction, fulfillSimulatedPayment, isSimulationEvent } from "@/lib/data/simulation";
 import { isSimulation } from "@/lib/env";
+import { assertPaidSurfaceConfigured } from "@/lib/env/production";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { jsonError, jsonOk, readJson } from "@/lib/http";
 import { publishDecisionAfterPayment } from "@/lib/payment/close-policy";
@@ -22,9 +23,8 @@ import { preflightMessage } from "@/lib/publish/preflight";
 export async function POST(request: Request) {
   try {
     const body = verifyPaymentSchema.parse(await readJson(request));
-    const user = await protectAnonymousWrite({ request, action: "verify" });
     const event = await getEventSnapshot(eventSlug());
-    assertNotSimulatedInProduction(event.id);
+    const user = await protectAnonymousWrite({ request, action: "verify" });
 
     if (isSimulation() || isSimulationEvent(event.id)) {
       const published = fulfillSimulatedPayment({
@@ -34,6 +34,9 @@ export async function POST(request: Request) {
       });
       return jsonOk(published);
     }
+
+    assertPaidSurfaceConfigured();
+    assertNotSimulatedInProduction(event.id);
 
     const db = createServiceSupabase();
 
@@ -110,7 +113,8 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    if (publishDecisionAfterPayment(event.phase, { endsAt: event.endsAt }) === "paid_after_close") {
+    const latest = await loadEventSnapshot(eventSlug());
+    if (publishDecisionAfterPayment(latest.phase, { endsAt: latest.endsAt }) === "paid_after_close") {
       await db.from("payment_failures").insert({
         payment_intent_id: intent.id,
         transaction_hash: verified.id,

@@ -77,10 +77,7 @@ describe("spectator deck", () => {
     expect(screen.getByRole("tab", { name: /^rising$/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /^random$/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /top 10/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /stream mode/i })).toHaveAttribute(
-      "href",
-      "/watch/stream?cycle=0",
-    );
+    expect(screen.getByRole("link", { name: /stream mode/i })).toHaveAttribute("href", "/live");
     expect(document.querySelector("audio")).toBeNull();
     expect(document.querySelector("video")).toBeNull();
   });

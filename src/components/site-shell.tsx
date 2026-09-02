@@ -26,7 +26,7 @@ export function SiteShell({
   const isAdmin = pathname.startsWith("/admin");
   const isCertificate = pathname.startsWith("/certificate");
   const isRandom = pathname === "/wall/random" || pathname.endsWith("/random");
-  const isStream = pathname.startsWith("/watch/stream");
+  const isStream = pathname === "/live" || pathname.startsWith("/watch/stream");
   const isArchive =
     pathname.startsWith("/archive") ||
     pathname.startsWith("/monument") ||

@@ -14,6 +14,9 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     if (localAdminEnabled()) {
+      const ipHash = clientIpHashForLimit(request);
+      const [ipLimit, ipWindow] = ABUSE_LIMITS.admin_login.ip;
+      await consumeRateLimit(rateLimitKey("admin_login", "ip", ipHash), ipLimit, ipWindow);
       const body = adminLoginSchema.parse(await readJson(request));
       if (!localAdminCredentialsMatch(body.email, body.password)) {
         throw new AppError(ERROR_CODES.FORBIDDEN, "Sign-in failed.", 401);

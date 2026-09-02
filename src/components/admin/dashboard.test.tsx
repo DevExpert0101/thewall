@@ -95,7 +95,7 @@ describe("admin dashboard", () => {
     expect(screen.getByText(/^launch$/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /waiting room/i })).toHaveAttribute("href", "/open");
     expect(screen.getByRole("link", { name: /^invite/i })).toHaveAttribute("href", "/invite");
-    expect(screen.getByRole("link", { name: /stream mode/i })).toHaveAttribute("href", "/watch/stream");
+    expect(screen.getByRole("link", { name: /stream mode/i })).toHaveAttribute("href", "/live");
     expect(screen.getByRole("link", { name: /open reports/i })).toHaveAttribute("href", "/admin/moderation");
     expect(screen.getByRole("link", { name: /this wall/i })).toHaveAttribute("href", "/admin/wall");
     expect(screen.getByRole("link", { name: /system/i })).toHaveAttribute("href", "/admin/system");

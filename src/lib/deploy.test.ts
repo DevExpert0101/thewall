@@ -30,11 +30,20 @@ describe("error reports", () => {
 });
 
 describe("instrumentation", () => {
-  it("does not crash the process when production env is incomplete", () => {
+  it("fails closed at boot when Vercel production env is incomplete", () => {
     const src = readFileSync("src/instrumentation.ts", "utf8");
-    expect(src).not.toContain("assertProductionEnv");
-    expect(src).toContain("evaluateProductionEnv");
-    expect(src).toContain("console.error");
+    expect(src).toContain("assertProductionEnv");
+    expect(src).toContain("phase-production-build");
+  });
+
+  it("guards paid routes with the hosted production contract", () => {
+    for (const file of [
+      "src/app/api/publish/intent/route.ts",
+      "src/app/api/publish/verify/route.ts",
+      "src/app/api/react/route.ts",
+    ]) {
+      expect(readFileSync(file, "utf8")).toContain("assertPaidSurfaceConfigured");
+    }
   });
 });
 

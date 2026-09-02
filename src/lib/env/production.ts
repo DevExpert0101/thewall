@@ -112,22 +112,41 @@ export function productionEnvFromProcess(
   };
 }
 
+/** Vercel (any env) or a non-localhost production host. Local `next dev` is not this. */
+export function isHostedDeploy(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.VERCEL || env.VERCEL_ENV) return true;
+  if (env.NODE_ENV !== "production") return false;
+  const site = (env.NEXT_PUBLIC_SITE_URL ?? "").toLowerCase();
+  return Boolean(site) && !site.includes("localhost") && !site.includes("127.0.0.1");
+}
+
+function throwIncompleteEnv(problems: string[], status: 500 | 503): never {
+  console.error(
+    JSON.stringify({
+      level: "error",
+      source: "the-wall",
+      code: ERROR_CODES.CONFIG,
+      problems,
+    }),
+  );
+  throw new AppError(
+    ERROR_CODES.CONFIG,
+    status === 503
+      ? "This site cannot take a $1 until it is fully configured."
+      : "Production environment is incomplete.",
+    status,
+  );
+}
+
 export function assertProductionEnv(env: NodeJS.ProcessEnv = process.env): void {
   if (!isVercelProduction(env.VERCEL_ENV)) return;
   const problems = evaluateProductionEnv(productionEnvFromProcess(env));
-  if (problems.length > 0) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        source: "the-wall",
-        code: ERROR_CODES.CONFIG,
-        problems,
-      }),
-    );
-    throw new AppError(
-      ERROR_CODES.CONFIG,
-      "Production environment is incomplete.",
-      500,
-    );
-  }
+  if (problems.length > 0) throwIncompleteEnv(problems, 500);
+}
+
+/** Paid and react routes. Hosted deploys must satisfy the production contract. */
+export function assertPaidSurfaceConfigured(env: NodeJS.ProcessEnv = process.env): void {
+  if (!isHostedDeploy(env)) return;
+  const problems = evaluateProductionEnv(productionEnvFromProcess(env));
+  if (problems.length > 0) throwIncompleteEnv(problems, 503);
 }

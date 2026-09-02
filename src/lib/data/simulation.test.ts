@@ -108,6 +108,36 @@ describe("live simulation", () => {
     expect(getSimulatedMessage(4).text).toMatch(/fifty years/i);
   });
 
+  it("uses the configured treasury on a simulated checkout", () => {
+    vi.stubEnv("NEXT_PUBLIC_TREASURY_ADDRESS", "0x0000000000000000000000000000000000000000");
+    vi.stubEnv("BASE_TREASURY_ADDRESS", "0x0000000000000000000000000000000000000000");
+    startSimulatedWall({
+      title: "TREASURY DAY",
+      durationMinutes: 5,
+      startsAt: new Date(Date.now() - 1000).toISOString(),
+    });
+    const checkout = createSimulatedIntent({
+      text: "Treasury alignment sentence.",
+      userId: "local-sim",
+      claimSecretHash: hashWallKey(createWallKey()),
+    });
+    expect(checkout.recipient).toBe("0x0000000000000000000000000000000000000000");
+  });
+
+  it("reseals the archive hash after a post-seal redaction", () => {
+    closeSimulatedWall(new Date("2026-08-13T18:00:00Z"));
+    const edition = listSimulatedEditions()[0];
+    expect(edition?.archiveHash).toBeTruthy();
+    const before = edition!.archiveHash;
+    const kept = getSimulatedEdition(edition!.editionNumber)?.messages.find((row) => row.publicNumber === 4);
+    expect(kept?.id).toBeTruthy();
+    moderateSimulatedMessage({ messageId: kept!.id, action: "remove" });
+    const after = getSimulatedEdition(edition!.editionNumber);
+    expect(after?.event.archiveHash).toBeTruthy();
+    expect(after?.event.archiveHash).not.toBe(before);
+    expect(listSimulatedEditions()[0]?.archiveHash).toBe(after?.event.archiveHash);
+  });
+
   it("opens a frozen archive with final ranks and no further writes", () => {
     const now = new Date("2026-08-13T18:00:00Z");
     const event = simulatedArchivedEvent(now);

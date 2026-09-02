@@ -108,7 +108,7 @@ describe("reaction integrity", () => {
         newSession: false,
         userAgent: BROWSER,
       },
-      "ok-token-ok-token",
+      "ok-token-ok-token-long",
     );
     expect(withToken.allow).toBe(true);
     expect(withToken.challenge).toBe(true);

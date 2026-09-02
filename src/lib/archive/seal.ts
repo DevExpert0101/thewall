@@ -5,6 +5,7 @@ import { publishArchiveCopies } from "@/lib/archive/copies";
 import { buildArchiveManifest } from "@/lib/archive/manifest";
 import { loadEditionLedger } from "@/lib/data/editions";
 import { hasSupabaseConfig, isSimulation } from "@/lib/env";
+import { isEventSealed } from "@/lib/event/state";
 import { createServiceSupabase } from "@/lib/supabase/admin";
 import type { EventSnapshot } from "@/lib/types";
 
@@ -44,4 +45,10 @@ export async function sealFinalizedEdition(event: EventSnapshot): Promise<Sealed
     proofTx: published.proofRef,
   });
   return sealed;
+}
+
+/** Official post-seal redaction: rebuild fingerprints so download/verify match the public ledger. */
+export async function resealFinalizedEdition(event: EventSnapshot): Promise<SealedArchive | null> {
+  if (!isEventSealed(event.phase) && !event.archiveHash) return null;
+  return sealFinalizedEdition(event);
 }

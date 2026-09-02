@@ -73,13 +73,14 @@ export default function AboutPage() {
           <h2 className="font-display text-3xl leading-tight text-paper">Spectator</h2>
           <p className="mt-4">
             Most people only watch. /watch is the free deck: Auto Wall, Rising,
-            Random, and Top 10. Stream mode at /watch/stream drops
-            the site chrome for OBS, Twitch, YouTube, TikTok Live, and hall
-            screens. It shows the countdown and message numbers. It does not
-            play sound, and it never shows wallets, keys, or emails. /live
-            opens the same room. /open is the shareable waiting room for the
-            scheduled opening. /invite is the same waiting room with an
-            invitation line — it does not grant a special right to publish.
+            Random, and Top 10. /live is the streamer board for OBS, Twitch,
+            YouTube, and hall screens: current #1, Rising, a rotating sentence,
+            and the countdown, with almost no navigation. It does not play
+            sound, and it never shows wallets, keys, or emails. /watch/stream
+            is a single-mode camera of the spectator deck. /open is the
+            shareable waiting room for the scheduled opening. /invite is the
+            same waiting room with an invitation line — it does not grant a
+            special right to publish.
           </p>
         </section>
         <section className="border-t border-line pt-10">

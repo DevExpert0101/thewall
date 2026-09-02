@@ -1,9 +1,13 @@
 import { expect, test } from "@playwright/test";
 
 const DESKTOP = { width: 1440, height: 900 };
-const MOBILE = { width: 390, height: 844 };
+const MOBILE = [
+  { width: 360, height: 800 },
+  { width: 390, height: 844 },
+  { width: 430, height: 932 },
+];
 
-for (const viewport of [DESKTOP, MOBILE]) {
+for (const viewport of [DESKTOP, ...MOBILE]) {
   test.describe(`suite 14 — ${viewport.width}x${viewport.height}`, () => {
     test.use({ viewport });
 

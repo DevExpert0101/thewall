@@ -39,6 +39,10 @@ describe("certificate view", () => {
     expect(screen.getByRole("link", { name: /portrait/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /print \/ pdf/i })).toBeInTheDocument();
     expect(screen.getByText(/never share your wall key/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /qr code for the public certificate of message 4291/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("http://localhost:3000/message/4291/certificate")).toBeInTheDocument();
     expect(document.body.innerHTML).not.toContain(TOKEN);
     expect(document.body.innerHTML).not.toContain('href="/certificate/');
     expect(screen.queryByText(/receipt|invoice|wallet/i)).not.toBeInTheDocument();

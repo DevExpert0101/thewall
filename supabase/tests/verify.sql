@@ -56,6 +56,16 @@ begin
   if not found then
     raise exception 'missing reactions_unique_user_message';
   end if;
+  perform 1 from pg_constraint
+  where conrelid = 'public.messages'::regclass and conname = 'messages_event_rank_unique';
+  if not found then
+    raise exception 'missing messages_event_rank_unique';
+  end if;
+  perform 1 from pg_trigger
+  where tgrelid = 'public.reactions'::regclass and tgname = 'reactions_sync_counts';
+  if not found then
+    raise exception 'missing reactions_sync_counts';
+  end if;
   perform 1 from pg_indexes
   where schemaname = 'public' and indexname = 'reactions_user_idempotency_uidx';
   if not found then

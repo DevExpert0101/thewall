@@ -3,10 +3,12 @@ import "server-only";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { createServiceSupabase } from "@/lib/supabase/admin";
 import { assertDangerousConfirm } from "@/lib/admin/confirm";
+import { resealFinalizedEdition } from "@/lib/archive/seal";
 import { mapPublishError } from "@/lib/data/rate-limit";
 import { eventSlug, getEventSnapshot } from "@/lib/data/event";
 import { getSimulatedMessageById, moderateSimulatedMessage } from "@/lib/data/simulation";
 import { hasSupabaseConfig, isSimulation } from "@/lib/env";
+import { isEventSealed } from "@/lib/event/state";
 import { recordAdminOpsAction } from "@/lib/ops/audit";
 import type { ModerationReasonCode } from "@/lib/constants";
 
@@ -90,8 +92,8 @@ export async function moderateMessage(input: {
     publicNumber: payload.public_number ?? message.public_number,
     action: input.action,
   };
+  const event = await getEventSnapshot(eventSlug());
   try {
-    const event = await getEventSnapshot(eventSlug());
     await recordAdminOpsAction({
       eventId: event.id,
       action: input.action,
@@ -101,6 +103,17 @@ export async function moderateMessage(input: {
     });
   } catch {
     // Moderation already committed.
+  }
+  if (isEventSealed(event.phase) || event.archiveHash) {
+    try {
+      await resealFinalizedEdition(event);
+    } catch {
+      throw new AppError(
+        ERROR_CODES.ARCHIVE_SEAL_FAILED,
+        "The sentence was updated. The archive is not verified until the seal succeeds.",
+        503,
+      );
+    }
   }
   return result;
 }

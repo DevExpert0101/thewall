@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Countdown } from "@/components/countdown";
 import { useSyncedNow } from "@/lib/event/clock";
 import { formatEventInstant, phaseAfterClock } from "@/lib/event/remaining";
@@ -199,10 +199,7 @@ export function WatchDeck({
   }
 
   const focused = messages[Math.min(focus, Math.max(messages.length - 1, 0))] ?? null;
-  const streamHref = useMemo(
-    () => watchPath({ stream: true, mode, cycleSec: cycling ? cycleSec : 0 }),
-    [cycleSec, cycling, mode],
-  );
+  const streamHref = "/live";
   const label = displayPhase === "upcoming" ? "Until launch" : displayPhase === "live" ? "Remaining" : "Closed";
 
   return (

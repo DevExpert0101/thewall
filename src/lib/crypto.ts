@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   WALL_KEY_ALPHABET,
   WALL_KEY_LENGTH,
@@ -10,6 +10,10 @@ import {
 
 export function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+export function hmacSha256Hex(secret: string, value: string): string {
+  return createHmac("sha256", secret).update(value, "utf8").digest("hex");
 }
 
 export function hashToken(token: string): string {

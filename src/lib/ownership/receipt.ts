@@ -1,4 +1,5 @@
 import { BRAND } from "@/lib/brand";
+import { colors } from "@/lib/design/tokens";
 import { formatWallKey } from "@/lib/ownership/wall-key";
 import { formatPublicNumber } from "@/lib/utils";
 
@@ -85,26 +86,26 @@ export function downloadOwnershipCard(input: {
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.strokeStyle = "rgba(198, 163, 108, 0.45)";
+  ctx.strokeStyle = `${colors.bronze}73`;
   ctx.lineWidth = 2;
   ctx.strokeRect(64, 64, canvas.width - 128, canvas.height - 128);
 
-  ctx.fillStyle = "#c6a36c";
+  ctx.fillStyle = colors.bronze;
   ctx.font = "22px ui-monospace, monospace";
   ctx.textAlign = "center";
   ctx.fillText(BRAND.wordmark, 600, 168);
   ctx.fillText(BRAND.ownershipReceiptMark, 600, 208);
 
-  ctx.fillStyle = "#9b9285";
+  ctx.fillStyle = colors.ash;
   ctx.font = "20px ui-sans-serif, sans-serif";
   ctx.fillText(BRAND.wallKeyContains, 600, 258);
 
-  ctx.fillStyle = "#f6f1e7";
+  ctx.fillStyle = colors.paper;
   ctx.font = "44px Georgia, serif";
   ctx.fillText(BRAND.wallKeyYours, 600, 340);
 
-  ctx.fillStyle = "rgba(198, 163, 108, 0.28)";
-  ctx.strokeStyle = "rgba(198, 163, 108, 0.55)";
+  ctx.fillStyle = `${colors.bronze}47`;
+  ctx.strokeStyle = `${colors.bronze}8c`;
   ctx.lineWidth = 2;
   ctx.fillRect(140, 380, 920, 200);
   ctx.strokeRect(140, 380, 920, 200);
@@ -114,13 +115,13 @@ export function downloadOwnershipCard(input: {
     groups.length >= 4
       ? [groups.slice(0, 2).join("-"), groups.slice(2).join("-")]
       : [key];
-  ctx.fillStyle = "#c6a36c";
+  ctx.fillStyle = colors.bronze;
   ctx.font = `${fitMonoSize(ctx, keyLines, 840, 56)}px ui-monospace, monospace`;
   keyLines.forEach((line, index) => {
     ctx.fillText(line, 600, 460 + index * 72);
   });
 
-  ctx.fillStyle = "#d8d0c4";
+  ctx.fillStyle = colors.mist;
   ctx.font = "24px ui-sans-serif, sans-serif";
   const proof = number
     ? `This private key proves that Message ${number} is yours.`
@@ -131,25 +132,25 @@ export function downloadOwnershipCard(input: {
 
   let cursor = 860;
   if (number) {
-    ctx.fillStyle = "#d8d0c4";
+    ctx.fillStyle = colors.mist;
     ctx.font = "28px ui-monospace, monospace";
     ctx.fillText(`MESSAGE ${number}`, 600, cursor);
     cursor += 56;
   }
 
   if (input.text) {
-    ctx.fillStyle = "#f6f1e7";
+    ctx.fillStyle = colors.paper;
     ctx.font = "30px Georgia, serif";
     cursor = wrapText(ctx, `“${input.text}”`, 600, cursor, 880, 40) + 48;
   }
 
   if (input.publishedAt) {
-    ctx.fillStyle = "#9b9285";
+    ctx.fillStyle = colors.ash;
     ctx.font = "22px ui-monospace, monospace";
     ctx.fillText(new Date(input.publishedAt).toISOString().replace(".000Z", " UTC"), 600, cursor);
   }
 
-  ctx.fillStyle = "#9b9285";
+  ctx.fillStyle = colors.ash;
   ctx.font = "20px ui-sans-serif, sans-serif";
   ctx.fillText(`This is not the ${BRAND.certificate}.`, 600, 1360);
   ctx.fillText(`The ${BRAND.certificate} is safe to share. This card is not.`, 600, 1400);

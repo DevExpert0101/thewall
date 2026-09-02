@@ -8,7 +8,7 @@ export const FIRST_VOICES = 100;
 
 export const WAITING_PATH = "/open";
 export const INVITE_PATH = "/invite";
-export const STREAM_PATH = "/watch/stream";
+export const STREAM_PATH = "/live";
 
 export const JUST_OPENED_TITLE = "THE WALL HAS JUST OPENED.";
 export const FIRST_HUNDRED_LINE = "YOU COULD BE ONE OF THE FIRST 100 VOICES.";
@@ -97,6 +97,6 @@ export function creatorLaunchLinks() {
   return [
     { href: WAITING_PATH, label: "Waiting room", note: "Shareable opening page. No special rights." },
     { href: INVITE_PATH, label: "Invite", note: "Same room, with an invitation line." },
-    { href: STREAM_PATH, label: "Stream mode", note: "Countdown and numbers for OBS. No wallets." },
+    { href: STREAM_PATH, label: "Stream mode", note: "OBS board: #1, Rising, random, countdown. No wallets." },
   ] as const;
 }

@@ -2,10 +2,10 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { applyTheme, parseTheme, resolveDocumentTheme } from "@/lib/design/theme";
-import { THEME_IDS, themes, type ThemeId } from "@/lib/design/tokens";
+import { DEFAULT_THEME, THEME_IDS, themes, type ThemeId } from "@/lib/design/tokens";
 
 export function ThemeSwitch() {
-  const [theme, setTheme] = useState<ThemeId>("limestone");
+  const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuId = useId();

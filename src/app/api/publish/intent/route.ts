@@ -1,9 +1,10 @@
 import { PAYMENT_INTENT_TTL_SECONDS, PRICE_USDC } from "@/lib/constants";
 import { createWallKey, hashWallKey } from "@/lib/crypto";
 import { protectAnonymousWrite } from "@/lib/abuse/protect";
-import { eventSlug, getEventOps, getEventSnapshot } from "@/lib/data/event";
+import { eventSlug, getEventOps, getEventSnapshot, loadEventSnapshot } from "@/lib/data/event";
 import { assertNotSimulatedInProduction, createSimulatedIntent, isSimulationEvent } from "@/lib/data/simulation";
 import { getNetwork, getTreasuryAddress, isSimulation } from "@/lib/env";
+import { assertPaidSurfaceConfigured } from "@/lib/env/production";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { assertPublishOpen } from "@/lib/event/state";
 import { jsonError, jsonOk, readJson } from "@/lib/http";
@@ -15,6 +16,12 @@ import { composeSchema } from "@/lib/validation";
 export async function POST(request: Request) {
   try {
     const body = composeSchema.parse(await readJson(request));
+    const event = await getEventSnapshot(eventSlug());
+    const ops = await getEventOps();
+    assertPublishOpen(event, ops);
+    assertPaidSurfaceConfigured();
+    assertNotSimulatedInProduction(event.id);
+
     const user = await protectAnonymousWrite({
       request,
       action: "intent",
@@ -22,11 +29,6 @@ export async function POST(request: Request) {
     });
 
     const { text, moderationStatus, decision } = await preflightMessage(body.message);
-
-    const event = await getEventSnapshot(eventSlug());
-    const ops = await getEventOps();
-    assertNotSimulatedInProduction(event.id);
-    assertPublishOpen(event, ops);
 
     const wallKey = createWallKey();
     const claimSecretHash = hashWallKey(wallKey);
@@ -61,6 +63,9 @@ export async function POST(request: Request) {
     const recipient = getTreasuryAddress().toLowerCase() as `0x${string}`;
     const network = getNetwork();
     const messageHash = bindMessageHash(text);
+
+    const latest = await loadEventSnapshot(eventSlug());
+    assertPublishOpen(latest, ops);
 
     const db = createServiceSupabase();
     const { data, error } = await db

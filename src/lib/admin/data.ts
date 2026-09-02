@@ -7,9 +7,11 @@ import { eventSlug, getEventOps, getEventSnapshot } from "@/lib/data/event";
 import { listSealedEditions } from "@/lib/data/editions";
 import {
   getSimulatedMessage,
+  listSimulatedHeldMessages,
   listSimulatedMessages,
   listSimulatedPaymentRecords,
   lookupSimulatedPaymentRecord,
+  simulatedAdminText,
   type SimulatedPaymentRecord,
 } from "@/lib/data/simulation";
 import { getNetwork, hasSupabaseConfig, isSimulation } from "@/lib/env";
@@ -91,16 +93,30 @@ export function configPreviewFromEvent(
 
 async function loadReviewRanks(eventId: string): Promise<AdminMessageHit[]> {
   if (isSimulation() || !hasSupabaseConfig()) {
-    return listSimulatedMessages({ eventId, sort: "hot", limit: 25 }).messages.map((message) => ({
+    const held = listSimulatedHeldMessages();
+    const live = listSimulatedMessages({ eventId, sort: "hot", limit: 25 }).messages.map((message) => ({
       id: message.id,
       publicNumber: message.publicNumber,
-      text: message.text,
+      text: simulatedAdminText(message.publicNumber),
       reactionCount: message.reactionCount,
       publishedAt: message.publishedAt,
       removedAt: message.isRemoved ? message.publishedAt : null,
       moderationStatus: message.isRemoved ? "removed" : "approved",
       removalReasonCode: message.isRemoved ? "other" : null,
     }));
+    return [
+      ...held.map((row) => ({
+        id: row.id,
+        publicNumber: row.publicNumber,
+        text: row.text,
+        reactionCount: 0,
+        publishedAt: new Date().toISOString(),
+        removedAt: null,
+        moderationStatus: row.moderationStatus,
+        removalReasonCode: null,
+      })),
+      ...live,
+    ].slice(0, 25);
   }
 
   const db = createServiceSupabase();
@@ -223,7 +239,7 @@ export async function loadAdminOverview(): Promise<AdminOverview> {
       recentFailures: [],
       recentPayments,
       openReports: [],
-      flaggedMessages: [],
+      flaggedMessages: listSimulatedHeldMessages(),
       reviewRanks: await loadReviewRanks(event.id),
       audit: [],
       health: await loadAdminHealth(event.phase),
@@ -348,15 +364,16 @@ export async function searchAdminMessages(q: string): Promise<AdminMessageHit[]>
     if (n) {
       try {
         const message = getSimulatedMessage(n, event.id);
+        const held = listSimulatedHeldMessages().find((row) => row.publicNumber === n);
         return [
           {
             id: message.id,
             publicNumber: message.publicNumber,
-            text: message.text,
+            text: held?.text ?? simulatedAdminText(message.publicNumber),
             reactionCount: message.reactionCount,
             publishedAt: message.publishedAt,
             removedAt: message.isRemoved ? message.publishedAt : null,
-            moderationStatus: message.isRemoved ? "removed" : "approved",
+            moderationStatus: message.isRemoved ? "removed" : held ? "flagged" : "approved",
             removalReasonCode: message.isRemoved ? "other" : null,
           },
         ];
@@ -366,19 +383,31 @@ export async function searchAdminMessages(q: string): Promise<AdminMessageHit[]>
     }
     const needle = q.trim().toLowerCase();
     if (needle.length < 2) return [];
-    return listSimulatedMessages({ eventId: event.id, sort: "new", limit: 50 })
-      .messages.filter((message) => message.text.toLowerCase().includes(needle))
-      .slice(0, 25)
+    const heldHits = listSimulatedHeldMessages()
+      .filter((row) => row.text.toLowerCase().includes(needle))
+      .map((row) => ({
+        id: row.id,
+        publicNumber: row.publicNumber,
+        text: row.text,
+        reactionCount: 0,
+        publishedAt: new Date().toISOString(),
+        removedAt: null,
+        moderationStatus: row.moderationStatus,
+        removalReasonCode: null,
+      }));
+    const liveHits = listSimulatedMessages({ eventId: event.id, sort: "new", limit: 50 })
+      .messages.filter((message) => simulatedAdminText(message.publicNumber).toLowerCase().includes(needle))
       .map((message) => ({
         id: message.id,
         publicNumber: message.publicNumber,
-        text: message.text,
+        text: simulatedAdminText(message.publicNumber),
         reactionCount: message.reactionCount,
         publishedAt: message.publishedAt,
         removedAt: message.isRemoved ? message.publishedAt : null,
         moderationStatus: message.isRemoved ? "removed" : "approved",
         removalReasonCode: message.isRemoved ? "other" : null,
       }));
+    return [...heldHits, ...liveHits].slice(0, 25);
   }
   const db = createServiceSupabase();
   const columns =

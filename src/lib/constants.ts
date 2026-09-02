@@ -4,6 +4,7 @@ export const APP_NAME = BRAND.wordmark;
 export const TAGLINE = "ONE DAY. ONE DOLLAR. ONE SENTENCE.";
 export const ARCHIVAL_TAGLINE = "ONE DAY. ONE DOLLAR. ONE SENTENCE.";
 export const ARCHIVAL_REMOVAL_TEXT = "Message removed under archive policy.";
+export const REVIEW_HOLD_TEXT = "This sentence is under review.";
 export const HERO_PITCH = [
   "For 24 hours, one wall is open.",
   "Anyone can read it.",

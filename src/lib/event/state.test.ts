@@ -29,6 +29,25 @@ describe("event phase", () => {
     expect(isEventWritable("finalizing")).toBe(false);
   });
 
+  it("stays finalizing after review close even if the clock steps backward", () => {
+    expect(
+      deriveEventPhase(
+        { ...base, reviewClosedAt: "2026-08-14T18:00:00.000Z" },
+        new Date("2026-08-14T17:59:59.000Z"),
+      ),
+    ).toBe("finalizing");
+    expect(() =>
+      assertWritesOpen(
+        {
+          phase: "live",
+          endsAt: "2026-08-15T00:00:00.000Z",
+          reviewClosedAt: "2026-08-14T18:00:00.000Z",
+        },
+        new Date("2026-08-14T17:59:59.000Z"),
+      ),
+    ).toThrow(AppError);
+  });
+
   it("is archived once finalized", () => {
     expect(
       deriveEventPhase(

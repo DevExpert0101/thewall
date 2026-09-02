@@ -1,4 +1,10 @@
 import { ImageResponse } from "next/og";
+import {
+  CERTIFICATE_QR_GROUND,
+  CERTIFICATE_QR_MARK,
+  certificateQrPath,
+  encodeCertificateQr,
+} from "@/lib/certificate/qr";
 import { ARCHIVAL_REMOVAL_TEXT } from "@/lib/constants";
 import { colors } from "@/lib/design/tokens";
 import { formatCount, formatObjectIdentity, formatUtcTime, formatWallEdition } from "@/lib/utils";
@@ -23,6 +29,8 @@ export function renderCertificateImage(
   const inscription = removed ? data.text : `“${data.text}”`;
   const rank = data.finalRank ? `Final rank #${data.finalRank}` : "Rank pending finalization";
   const stats = `${rank}  ·  ${formatCount(data.reactionCount)} 🔥`;
+  const qr = encodeCertificateQr(data.publicNumber);
+  const qrBox = portrait ? 148 : 128;
 
   return new ImageResponse(
     (
@@ -80,10 +88,36 @@ export function renderCertificateImage(
             {`Published ${formatUtcTime(data.publishedAt)}`}
           </div>
         </div>
-        <div style={{ display: "flex", fontSize: 16, letterSpacing: 4, color: colors.bronze }}>
-          {typeof data.totalMessages === "number"
-            ? `${formatCount(data.totalMessages)} people spoke that day. This was one of them.`
-            : formatObjectIdentity(data.publicNumber, data.editionNumber)}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            width: "100%",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              fontSize: 16,
+              letterSpacing: 4,
+              color: colors.bronze,
+              maxWidth: size.width - qrBox - 200,
+            }}
+          >
+            {typeof data.totalMessages === "number"
+              ? `${formatCount(data.totalMessages)} people spoke that day. This was one of them.`
+              : formatObjectIdentity(data.publicNumber, data.editionNumber)}
+          </div>
+          <svg
+            width={qrBox}
+            height={qrBox}
+            viewBox={`0 0 ${qr.viewBox} ${qr.viewBox}`}
+            style={{ display: "flex" }}
+          >
+            <rect width={qr.viewBox} height={qr.viewBox} fill={CERTIFICATE_QR_GROUND} />
+            <path d={certificateQrPath(qr.data, qr.quietZone)} fill={CERTIFICATE_QR_MARK} />
+          </svg>
         </div>
       </div>
     ),

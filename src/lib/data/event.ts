@@ -31,10 +31,11 @@ type EventRow = {
   merkle_root?: string | null;
   archive_uri?: string | null;
   proof_tx?: string | null;
+  review_closed_at?: string | null;
 };
 
 const EVENT_COLUMNS =
-  "id, slug, title, starts_at, ends_at, archived_at, finalized_at, edition_number, theme_slug, theme_question, theme_description, archive_hash, merkle_root, archive_uri, proof_tx";
+  "id, slug, title, starts_at, ends_at, archived_at, finalized_at, review_closed_at, edition_number, theme_slug, theme_question, theme_description, archive_hash, merkle_root, archive_uri, proof_tx";
 
 const finalizeInflight = new Map<string, Promise<EventRow>>();
 
@@ -65,6 +66,7 @@ export async function getEventBySlug(
     endsAt: event.ends_at,
     archivedAt: event.archived_at,
     finalizedAt: event.finalized_at,
+    reviewClosedAt: event.review_closed_at ?? null,
   });
 
   if (options.finalize === true && phase === "finalizing" && !event.finalized_at) {
@@ -127,6 +129,7 @@ async function snapshotFromSlug(slug: string, finalize: boolean): Promise<EventS
     endsAt: event.ends_at,
     archivedAt: event.archived_at,
     finalizedAt: event.finalized_at,
+    reviewClosedAt: event.review_closed_at ?? null,
   });
 
   let treasury: string | null = null;
@@ -144,6 +147,7 @@ async function snapshotFromSlug(slug: string, finalize: boolean): Promise<EventS
     endsAt: event.ends_at,
     archivedAt: event.archived_at,
     finalizedAt: event.finalized_at,
+    reviewClosedAt: event.review_closed_at ?? null,
     phase,
     serverNow: new Date().toISOString(),
     totalMessages,

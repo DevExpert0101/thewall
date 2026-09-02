@@ -104,18 +104,35 @@ export class AppError extends Error {
   }
 }
 
+function isErrorCode(value: unknown): value is ErrorCode {
+  return typeof value === "string" && value in ERROR_CODES;
+}
+
+/** Bundlers can duplicate this class; still honor a real AppError-shaped throw. */
+export function asAppError(error: unknown): AppError | null {
+  if (error instanceof AppError) return error;
+  if (!error || typeof error !== "object") return null;
+  const row = error as { name?: unknown; code?: unknown; message?: unknown; status?: unknown; recovery?: unknown };
+  if (row.name !== "AppError" || !isErrorCode(row.code)) return null;
+  const message = typeof row.message === "string" ? row.message : RECOVERY[row.code];
+  const status = typeof row.status === "number" ? row.status : 400;
+  const recovery = typeof row.recovery === "string" ? row.recovery : undefined;
+  return new AppError(row.code, message, status, recovery);
+}
+
 export function publicErrorPayload(error: unknown): {
   error: string;
   code: string;
   recovery: string;
   status: number;
 } {
-  if (error instanceof AppError) {
+  const app = asAppError(error);
+  if (app) {
     return {
-      error: redactSensitiveText(error.message),
-      code: error.code,
-      recovery: redactSensitiveText(error.recovery),
-      status: error.status,
+      error: redactSensitiveText(app.message),
+      code: app.code,
+      recovery: redactSensitiveText(app.recovery),
+      status: app.status,
     };
   }
   if (error instanceof ZodError) {

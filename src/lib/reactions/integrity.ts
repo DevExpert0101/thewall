@@ -219,13 +219,18 @@ export function listReactionSignals(limit = 25): ReactionSignal[] {
   return signals.slice(0, limit);
 }
 
+function isPlaceholderTurnstileToken(token: string): boolean {
+  const trimmed = token.trim();
+  return trimmed.length < 20 || /^(.)\1+$/.test(trimmed);
+}
+
 export function challengeReactionOrThrow(
   input: ReactionObserveInput,
   token: string | undefined,
 ): ReactionDecision {
   const decision = evaluateReactionIntegrity(input);
   if (!decision.challenge) return decision;
-  if (token && token.length >= 10) return decision;
+  if (token && !isPlaceholderTurnstileToken(token)) return decision;
 
   rememberReactionChallenge(input.ipHash, input.at);
   const challenge = signal(

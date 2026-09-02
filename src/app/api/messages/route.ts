@@ -23,6 +23,7 @@ export async function GET(request: Request) {
       q: url.searchParams.get("q") ?? undefined,
       salt: url.searchParams.get("salt") ?? undefined,
       edition: url.searchParams.get("edition") ?? undefined,
+      mix: url.searchParams.get("mix") ?? undefined,
     });
     const event = parsed.edition
       ? await loadSealedEdition(parsed.edition)

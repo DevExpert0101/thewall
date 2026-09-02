@@ -6,12 +6,16 @@ import { hasSupabaseConfig, isSimulation } from "@/lib/env";
 import { createServiceSupabase } from "@/lib/supabase/admin";
 import { pulseQuerySchema } from "@/lib/validation";
 import type { EventSnapshot } from "@/lib/types";
+import { consumeRateLimit } from "@/lib/data/rate-limit";
+import { clientIpHashForLimit } from "@/lib/abuse/ip";
+import { ABUSE_LIMITS, rateLimitKey } from "@/lib/abuse/keys";
 
 type PulseRow = {
   starts_at: string;
   ends_at: string;
   archived_at: string | null;
   finalized_at: string | null;
+  review_closed_at?: string | null;
   total_messages: number;
   total_reactions: number;
   latest_public_number?: number;
@@ -38,6 +42,9 @@ function fromSnapshot(
 
 export async function GET(request: Request) {
   try {
+    const ipHash = clientIpHashForLimit(request);
+    const [limit, windowSeconds] = ABUSE_LIMITS.pulse.ip;
+    await consumeRateLimit(rateLimitKey("pulse", "ip", ipHash), limit, windowSeconds);
     const url = new URL(request.url);
     const parsed = pulseQuerySchema.parse({
       ids: url.searchParams.get("ids") ?? "",
@@ -76,6 +83,7 @@ export async function GET(request: Request) {
       endsAt: row.ends_at,
       archivedAt: row.archived_at,
       finalizedAt: row.finalized_at,
+      reviewClosedAt: row.review_closed_at ?? null,
     });
     return jsonOk(
       {

@@ -212,12 +212,20 @@ export function compareHot(
   );
 }
 
-export function isLivingForVictor<T extends { isRemoved?: boolean }>(message: T): boolean {
-  return message.isRemoved !== true;
+export function isLivingForVictor<T extends { isRemoved?: boolean; isHeld?: boolean }>(
+  message: T,
+): boolean {
+  return message.isRemoved !== true && message.isHeld !== true;
 }
 
 export function assignFinalRanks<
-  T extends { reactionCount: number; publishedAt: string; publicNumber: number; isRemoved?: boolean },
+  T extends {
+    reactionCount: number;
+    publishedAt: string;
+    publicNumber: number;
+    isRemoved?: boolean;
+    isHeld?: boolean;
+  },
 >(messages: T[]): (T & { finalRank: number | null })[] {
   const order = messages.filter(isLivingForVictor).sort(compareHot);
   const rank = new Map(order.map((message, index) => [message.publicNumber, index + 1]));

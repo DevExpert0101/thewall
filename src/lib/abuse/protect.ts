@@ -12,7 +12,7 @@ import {
   type AbuseAction,
 } from "@/lib/abuse/keys";
 import { verifyTurnstileToken } from "@/lib/abuse/turnstile";
-import { isSimulation } from "@/lib/env";
+import { hasSupabaseConfig, isSimulation } from "@/lib/env";
 
 type ProtectOptions = {
   request: Request;
@@ -24,7 +24,7 @@ type ProtectOptions = {
 export async function protectAnonymousWrite(options: ProtectOptions): Promise<AnonymousSession> {
   const { request, action, turnstileToken, forceTurnstile } = options;
 
-  if (isSimulation()) {
+  if (isSimulation() || !hasSupabaseConfig()) {
     return { id: "local-sim", restored: true };
   }
 

@@ -7,7 +7,7 @@ import { clientIpHashForLimit } from "@/lib/abuse/ip";
 import { ABUSE_LIMITS, rateLimitKey } from "@/lib/abuse/keys";
 import { shouldCreateAnonymousUser } from "@/lib/abuse/session-policy";
 import { resolveAdminAccess } from "@/lib/admin/access";
-import { peekLocalAdmin } from "@/lib/admin/local";
+import { localAdminEnabled, peekLocalAdmin } from "@/lib/admin/local";
 
 export type AnonymousSession = {
   id: string;
@@ -69,12 +69,19 @@ export async function ensureAnonymousUser(request?: Request): Promise<AnonymousS
   return { id: data.user.id, restored: false };
 }
 
+export function missingOperatorError(localAdminOn: boolean): AppError {
+  if (localAdminOn) {
+    return new AppError(ERROR_CODES.FORBIDDEN, "Administrator sign-in required.", 401);
+  }
+  return new AppError(ERROR_CODES.CONFIG, "Administrator sign-in is not configured.", 503);
+}
+
 export async function requireAdmin(): Promise<{ id: string; email: string }> {
   const local = await peekLocalAdmin();
   if (local) return local;
 
-  if (!hasSupabaseConfig()) {
-    throw new AppError(ERROR_CODES.CONFIG, "Administrator sign-in is not configured.", 503);
+  if (localAdminEnabled() || !hasSupabaseConfig()) {
+    throw missingOperatorError(localAdminEnabled());
   }
 
   const supabase = await createServerSupabase();

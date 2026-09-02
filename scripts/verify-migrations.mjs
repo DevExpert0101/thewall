@@ -21,6 +21,7 @@ const TX_1 = `0x${"11".repeat(32)}`;
 const TX_2 = `0x${"22".repeat(32)}`;
 const TX_3 = `0x${"33".repeat(32)}`;
 const TX_4 = `0x${"44".repeat(32)}`;
+const TX_5 = `0x${"55".repeat(32)}`;
 
 let passed = 0;
 let failed = 0;
@@ -253,6 +254,10 @@ async function main() {
     "tx_already_used",
     "same transaction hash cannot publish twice",
   );
+
+  const unusedSteal = await insertIntent(db, { message: "unused hash still bindable at RPC", messageHash: HASH_C });
+  const stolen = await publish(db, unusedSteal, TX_5, HASH_C);
+  assert(asJson(stolen.rows[0].result).public_number === 3, "RPC accepts an unused 1 USDC hash on a later intent");
 
   const expiredId = await insertIntent(db, {
     message: "expired window",
@@ -537,7 +542,7 @@ async function main() {
   const visibleView = await asAnon(() =>
     db.query("select public_number, text, is_removed from public.public_messages"),
   );
-  assert(visibleView.rows.length === 2, "anon can read public_messages");
+  assert(visibleView.rows.length === 3, "anon can read public_messages");
 
   await expectError(
     () => asAnon(() => db.query("select * from public.payment_intents")),
@@ -758,8 +763,8 @@ async function main() {
     [messageId],
   ]);
   const pulseJson = asJson(pulse.rows[0].result);
-  assert(pulseJson.total_messages === 2, "wall_pulse returns counter totals");
-  assert(pulseJson.latest_public_number === 2, "wall_pulse returns the latest public number");
+  assert(pulseJson.total_messages === 3, "wall_pulse returns counter totals");
+  assert(pulseJson.latest_public_number === 3, "wall_pulse returns the latest public number");
   assert(Number(pulseJson.counts[messageId]) === 1, "wall_pulse returns requested reaction counts");
   const hour = await db.query(
     `select hour_count, hour_minutes from public.hour_reaction_counts($1::uuid, now() - interval '1 hour', 200)`,

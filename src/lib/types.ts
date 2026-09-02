@@ -4,6 +4,7 @@ export type PublicMessage = {
   publicNumber: number;
   text: string;
   isRemoved: boolean;
+  isHeld?: boolean;
   reactionCount: number;
   publishedAt: string;
   finalRank: number | null;
@@ -17,6 +18,7 @@ export type EventSnapshot = {
   endsAt: string;
   archivedAt: string | null;
   finalizedAt: string | null;
+  reviewClosedAt?: string | null;
   phase: "upcoming" | "live" | "finalizing" | "archived";
   serverNow: string;
   totalMessages: number;
