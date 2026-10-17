@@ -8,7 +8,7 @@ describe("hero intro film", () => {
     const { container } = render(<HeroIntroFilm onDone={onDone} />);
     const video = container.querySelector("video");
     expect(video?.getAttribute("poster")).toBe("/hero-wall-poster.jpg");
-    expect(container.querySelector("source")?.getAttribute("src")).toBe("/hero-wall.mp4");
+    expect(container.querySelector("source")?.getAttribute("src")).toBe("/hero-wall-2.mp4");
     expect(video?.hasAttribute("loop")).toBe(false);
     video?.dispatchEvent(new Event("ended"));
     expect(onDone).toHaveBeenCalledTimes(1);

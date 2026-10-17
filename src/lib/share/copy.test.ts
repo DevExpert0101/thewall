@@ -65,6 +65,27 @@ describe("share copy", () => {
     expect(payload.text).not.toMatch(/hours remain|closes in/i);
   });
 
+  it("calls a wall under review closed, and a finished wall sealed", () => {
+    const review = sharePayloadForEvent({ ...live, phase: "finalizing" });
+    expect(review.title).toBe("THE WALL — closed");
+    expect(review.text).toContain("The day is under review.");
+    expect(review.text).not.toMatch(/sealed/i);
+    const sealed = sharePayloadForEvent({ ...live, phase: "archived" });
+    expect(sealed.title).toBe("THE WALL — sealed");
+    expect(sealed.text).toContain("The Wall is sealed.");
+    const reviewCard = composeCreative({ kind: "countdown", event: { ...live, phase: "finalizing" } });
+    expect(reviewCard.title).toBe("THE WALL IS CLOSED");
+    expect(reviewCard.body).toMatch(/under review/i);
+    const sealedCard = composeCreative({ kind: "countdown", event: { ...live, phase: "archived" } });
+    expect(sealedCard.title).toBe("THE WALL IS SEALED");
+    const reviewMessage = sharePayloadForMessage({
+      event: { ...live, phase: "finalizing" },
+      message: { ...message, finalRank: 4 },
+    });
+    expect(reviewMessage.text).toContain("closed for review");
+    expect(reviewMessage.text).not.toMatch(/final rank|sealed/i);
+  });
+
   it("uses the real sentence count on event posts", () => {
     const payload = sharePayloadForEvent(live, "/wall");
     expect(payload.text).toContain("18 people spoke");

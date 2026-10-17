@@ -19,6 +19,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
+  // Webpack dev drops parallel document loads on Windows (net::ERR_ABORTED).
+  workers: process.env.CI ? undefined : 1,
   use: {
     baseURL,
     ...devices["Desktop Chrome"],
@@ -28,7 +30,7 @@ export default defineConfig({
   webServer: remote
     ? undefined
     : {
-        command: "npx next dev --turbopack --port 3000",
+        command: "npx next dev --webpack --port 3000",
         url: "http://127.0.0.1:3000",
         reuseExistingServer: true,
         timeout: 120_000,

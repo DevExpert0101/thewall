@@ -1,5 +1,4 @@
 import { APP_NAME, TAGLINE } from "@/lib/constants";
-import { THEME_BOOT_SCRIPT } from "@/lib/design/theme";
 
 function jsonLdUrl(): string {
   const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim();
@@ -30,7 +29,7 @@ export async function sha256Base64(value: string): Promise<string> {
 }
 
 export async function pageScriptHashes(): Promise<string[]> {
-  return Promise.all([sha256Base64(THEME_BOOT_SCRIPT), sha256Base64(siteJsonLdScript())]);
+  return Promise.all([sha256Base64(siteJsonLdScript())]);
 }
 
 /** One-time CSP nonce. Must be unique per HTML request. */

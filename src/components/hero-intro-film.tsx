@@ -36,7 +36,7 @@ export function HeroIntroFilm({ onDone }: { onDone: () => void }) {
       onEnded={finish}
       onError={finish}
     >
-      <source src="/hero-wall.mp4" type="video/mp4" />
+      <source src="/hero-wall-2.mp4" type="video/mp4" />
     </video>
   );
 }

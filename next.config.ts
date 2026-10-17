@@ -11,7 +11,7 @@ function lanDevOrigins() {
   const fromNics = Object.values(networkInterfaces())
     .flat()
     .flatMap((nic) => (nic && nic.family === "IPv4" && !nic.internal ? [nic.address] : []));
-  return [...new Set([...fromNics, ...fromEnv])];
+  return [...new Set(["localhost", "127.0.0.1", ...fromNics, ...fromEnv])];
 }
 
 const nextConfig: NextConfig = {

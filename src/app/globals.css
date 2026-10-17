@@ -1334,8 +1334,10 @@ select.field {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background-color: #1a1916;
-  background-image: url("/hero-stone.png");
+  background-color: #12110f;
+  background-image:
+    linear-gradient(180deg, rgb(8 7 6 / 0.12), rgb(8 7 6 / 0.22)),
+    url("/hero-wall-still.jpg");
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -1375,16 +1377,24 @@ select.field {
 
 .hero-wall .monument-sentence {
   cursor: default;
-  color: rgb(22 18 16 / 0.86);
-  font-size: clamp(1.2rem, 2.4vw, 1.7rem) !important;
-  font-weight: 700;
-  line-height: 1.4 !important;
-  mix-blend-mode: multiply;
+  color: #e6c56a;
+  font-family: var(--font-display), ui-serif, Georgia, serif;
+  font-size: clamp(1.05rem, 2.1vw, 1.55rem) !important;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.35 !important;
+  mix-blend-mode: normal;
   text-shadow:
-    -1px -1px 0 rgb(0 0 0 / 0.88),
-    -2px -2px 1px rgb(0 0 0 / 0.5),
-    1px 1px 0 rgb(230 220 204 / 0.24),
-    2px 2px 2px rgb(0 0 0 / 0.26);
+    0 0 1px #fff4c4,
+    0 1px 0 #7a5816,
+    0 2px 3px rgb(0 0 0 / 0.7),
+    0 0 10px rgb(212 175 55 / 0.32);
+}
+
+.hero-wall .monument-sentence.is-removed {
+  color: #8a8070;
+  mix-blend-mode: multiply;
+  text-shadow: none;
 }
 
 .hero-wall .monument-sentence.is-carving {

@@ -67,16 +67,19 @@ export function SimulationBar() {
           Simulation · {closed ? "this Wall is closed" : "pay is local · no chain"}
           {snap.endsAt && !closed ? (
             <span className="ml-3 font-mono tracking-widest text-paper">
+              {" · "}
               {clockLabel(snap.endsAt, now)}
             </span>
           ) : null}
           {typeof snap.totalMessages === "number" ? (
             <span className="ml-3 text-ash">
+              {" · "}
               {snap.totalMessages} sentences · {snap.totalReactions ?? 0} fire
             </span>
           ) : null}
           {typeof snap.editionCount === "number" && snap.editionCount > 0 ? (
             <span className="ml-3 text-ash">
+              {" · "}
               {snap.editionCount} sealed {snap.editionCount === 1 ? "edition" : "editions"}
             </span>
           ) : null}

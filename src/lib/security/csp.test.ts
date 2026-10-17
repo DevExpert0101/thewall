@@ -27,8 +27,8 @@ describe("content security policy", () => {
     const { pageScriptHashes, siteJsonLdScript } = await import("@/lib/security/csp");
     const hashes = await pageScriptHashes();
     const header = contentSecurityPolicy("", false, hashes);
+    expect(hashes).toHaveLength(1);
     expect(header).toContain(`'sha256-${hashes[0]}'`);
-    expect(header).toContain(`'sha256-${hashes[1]}'`);
     expect(header).not.toContain("'nonce-");
     expect(siteJsonLdScript()).toContain("WebSite");
     expect(siteJsonLdScript()).not.toContain("EventMovedOnline");

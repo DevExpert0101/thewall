@@ -32,10 +32,10 @@ export default function AboutPage() {
       <div className="mt-10 space-y-12 text-[1.05rem] leading-relaxed text-mist">
         <p>
           The Wall is a 24-hour monument. Anyone may read it. $1 writes one
-          140-character sentence. When the clock hits zero, writing stops. That
-          day is sealed as THE WALL №001, then №002, and so
-          on. The Archive is the library of those completed days. A sealed Wall
-          does not reopen.
+          140-character sentence. When the clock hits zero, writing stops. The
+          day stays under review until it is finished, then it is sealed as THE
+          WALL №001, then №002, and so on. The Archive is the library of those
+          completed days. A sealed Wall does not reopen.
         </p>
         <p>
           What stays is a file, not a vendor. The live site is a working copy. When

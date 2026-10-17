@@ -182,6 +182,9 @@ async function applySimulatedEvent(
     const before = currentSimulatedEvent();
     startSimulatedWall({
       title: input.title,
+      themeSlug: input.themeSlug,
+      themeQuestion: input.themeQuestion,
+      themeDescription: input.themeDescription,
       ...openWindowFromInput(input),
     });
     await markSimulatedClosed(false);

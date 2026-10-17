@@ -17,7 +17,7 @@ export function IntroWallFilm() {
           video.currentTime = last;
         }}
       >
-        <source src="/hero-wall.mp4" type="video/mp4" />
+        <source src="/hero-wall-2.mp4" type="video/mp4" />
       </video>
       <figcaption className="sr-only">The Wall being inscribed.</figcaption>
     </figure>

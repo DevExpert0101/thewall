@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { PRICE_USDC_ATOMIC } from "@/lib/constants";
-import { AppError, ERROR_CODES } from "@/lib/errors";
+import { AppError } from "@/lib/errors";
 import { evaluatePaymentProof } from "@/lib/payment/evaluate";
 import { fulfillSimulatedPayment } from "@/lib/data/simulation";
 import {

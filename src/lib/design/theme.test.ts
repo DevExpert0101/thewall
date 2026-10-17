@@ -29,5 +29,6 @@ describe("themes", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe("navy");
     expect(document.documentElement.getAttribute("data-scheme")).toBe("dark");
     expect(readStoredTheme()).toBe("navy");
+    expect(document.cookie).toContain("thewall-theme=navy");
   });
 });

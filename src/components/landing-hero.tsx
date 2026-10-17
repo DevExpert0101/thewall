@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import { ClosedMonument } from "@/components/closed-monument";
 import { Countdown } from "@/components/countdown";
 import { HeroIntroFilm } from "@/components/hero-intro-film";
-import { MonumentCanvas } from "@/components/monument-canvas";
 import { PrimaryCta } from "@/components/primary-cta";
 import { PublishDialog } from "@/components/publish-dialog";
 import { MonumentTitle } from "@/components/monument-title";
@@ -22,7 +21,6 @@ import {
 import { reconcilePublicPhase } from "@/lib/event/state";
 import { FIRST_HUNDRED_LINE, JUST_OPENED_TITLE, WAITING_PATH, firstHundredLine, launchMoment } from "@/lib/launch/cold-start";
 import { sharePayloadForEvent } from "@/lib/share/copy";
-import type { MonumentCatalog } from "@/lib/monument/types";
 import type { EventSnapshot, PublicMessage } from "@/lib/types";
 import { editionNumberOf, formatCount, formatObjectIdentity } from "@/lib/utils";
 
@@ -31,32 +29,22 @@ const TAGLINE_LINES = TAGLINE.split(/(?<=\.)\s+/);
 export function LandingHero({
   event,
   featured = null,
-  monument = null,
 }: {
   event: EventSnapshot;
   featured?: PublicMessage | null;
-  monument?: MonumentCatalog | null;
 }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(event);
   const [phase, setPhase] = useState(event.phase);
   const [serverNow, setServerNow] = useState(event.serverNow);
-  const [catalog, setCatalog] = useState(monument);
-  const [freshIds, setFreshIds] = useState<string[]>([]);
   const [introDone, setIntroDone] = useState(false);
   const [eventSource, setEventSource] = useState(event);
-  const [monumentSource, setMonumentSource] = useState(monument);
   const viewRef = useRef(view);
-  const seenMonumentIds = useRef(new Set(monument?.entries.map((entry) => entry.id) ?? []));
   if (event !== eventSource) {
     setEventSource(event);
     setView(event);
     setPhase(event.phase);
     setServerNow(event.serverNow);
-  }
-  if (monument !== monumentSource) {
-    setMonumentSource(monument);
-    setCatalog(monument);
   }
   const now = useSyncedNow(serverNow);
   const clock = phaseAfterClock(phase, view.startsAt, view.endsAt, now);
@@ -76,37 +64,7 @@ export function LandingHero({
   });
 
   useEffect(() => {
-    for (const entry of monument?.entries ?? []) seenMonumentIds.current.add(entry.id);
-  }, [monument]);
-
-  useEffect(() => {
     let cancelled = false;
-    let carveTimer = 0;
-    async function refreshMonument() {
-      try {
-        const res = await fetch("/api/monument", { cache: "no-store" });
-        const data = await res.json();
-        if (cancelled || !data || !Array.isArray(data.entries) || !data.canvas) return;
-        const added = data.entries
-          .filter((row: { id?: unknown }) => typeof row.id === "string" && !seenMonumentIds.current.has(row.id))
-          .map((row: { id: string }) => row.id);
-        for (const id of added) seenMonumentIds.current.add(id);
-        setCatalog({
-          entries: data.entries,
-          sealedCount: typeof data.sealedCount === "number" ? data.sealedCount : data.entries.length,
-          capacity: data.capacity ?? null,
-          canvas: data.canvas,
-        });
-        if (added.length === 0) return;
-        setFreshIds(added);
-        window.clearTimeout(carveTimer);
-        carveTimer = window.setTimeout(() => {
-          setFreshIds((current) => current.filter((id) => !added.includes(id)));
-        }, 1800);
-      } catch {
-        // keep the last sealed stone
-      }
-    }
     async function refresh() {
       try {
         const res = await fetch("/api/event", { cache: "no-store" });
@@ -146,7 +104,6 @@ export function LandingHero({
       } catch {
         // keep the last good phase
       }
-      void refreshMonument();
     }
     void refresh();
     const id = window.setInterval(() => {
@@ -159,7 +116,6 @@ export function LandingHero({
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
-      window.clearTimeout(carveTimer);
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
@@ -178,14 +134,6 @@ export function LandingHero({
       <div className="hero-wall" data-intro={introDone ? "done" : "playing"} aria-hidden="true">
         {!introDone ? <HeroIntroFilm onDone={() => setIntroDone(true)} /> : null}
         <div className="hero-stone" />
-        {catalog && catalog.entries.length > 0 ? (
-          <MonumentCanvas
-            decorative
-            canvas={catalog.canvas}
-            entries={catalog.entries}
-            freshIds={freshIds}
-          />
-        ) : null}
       </div>
       <div className="hero-urgency-veil" aria-hidden="true" />
 

@@ -19,15 +19,16 @@ export function MessageExhibit({
   const remaining = remainingMsFrom(target, now);
   const presentation = eventPresentation(event.phase, remaining);
   const live = event.phase === "live" && remaining > 0;
-  const sealed = presentation === "closed";
+  const closed = presentation === "closed";
+  const sealed = event.phase === "archived";
   const edition = editionNumberOf(event);
 
   return (
     <article className="message-exhibit" data-presentation={presentation}>
       <header className="message-exhibit-brand">
         <p className="message-exhibit-wordmark">{wallTitle(event)}</p>
-        {sealed ? (
-          <p className="kicker text-bronze">Sealed</p>
+        {closed ? (
+          <p className="kicker text-bronze">{sealed ? "Sealed" : "Closed"}</p>
         ) : (
           <Countdown
             targetIso={target}

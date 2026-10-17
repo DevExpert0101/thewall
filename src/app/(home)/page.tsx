@@ -7,8 +7,6 @@ import { LandingPreviewActions } from "@/components/landing-preview-actions";
 import { MessageCard } from "@/components/message-card";
 import { WitnessPlaque } from "@/components/witness-plaque";
 import { loadEvent, loadLandingWitness, loadLatestPublicWinner } from "@/lib/data/load";
-import { monumentCanvasFromEnv } from "@/lib/monument/canvas";
-import { listMonumentEntries } from "@/lib/monument/store";
 import { publicPageMetadata } from "@/lib/share/metadata";
 import type { Metadata } from "next";
 import type { PublicMessage } from "@/lib/types";
@@ -25,17 +23,11 @@ export default async function HomePage() {
   const carved = await loadLandingWitness(event);
   const featured = event.phase === "live" ? (carved[0] ?? null) : null;
   const shrine = event.phase === "archived" ? await resolveShrine(event) : null;
-  const monument = await listMonumentEntries().catch(() => ({
-    entries: [],
-    sealedCount: 0,
-    capacity: null,
-    canvas: monumentCanvasFromEnv(),
-  }));
 
   return (
     <main>
       <JsonLd event={event} />
-      <LandingHero event={event} featured={featured} monument={monument} />
+      <LandingHero event={event} featured={featured} />
 
       {carved.length > 0 ? (
         <section className="section-monument">
@@ -61,8 +53,11 @@ export default async function HomePage() {
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             <Step n="01" title="Write 140 characters" body="One sentence. No name. No profile. No audience to perform for." />
             <Step n="02" title="Pay one dollar" body="$1, once. No account. The payment is not your name. Nothing else is sold." />
-            <Step n="03" title="Take your number" body="When the clock hits zero, this Wall is sealed. Your number is never reused on that day." />
+            <Step n="03" title="Take your number" body="When the clock hits zero, writing stops. The day stays under review until it is finished, then it is sealed. Your number is never reused." />
           </div>
+          <p className="lede mt-10 max-w-xl">
+            Before you pay, save your Wall Key. We cannot recover it. Without that key, you cannot prove the sentence is yours.
+          </p>
           <div className="mt-10">
             <Link href="/how-it-works" className="btn-ghost kicker hover:text-paper">
               How it works →

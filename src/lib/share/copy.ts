@@ -77,9 +77,13 @@ export function sharePayloadForMessage(input: {
     };
   }
 
-  const lines = [quote, spoken + ".", input.message.finalRank ? `Final rank #${input.message.finalRank}.` : null, `${place} is sealed.`].filter(
-    (line): line is string => Boolean(line),
-  );
+  const underReview = input.event.phase === "finalizing";
+  const lines = [
+    quote,
+    spoken + ".",
+    !underReview && input.message.finalRank ? `Final rank #${input.message.finalRank}.` : null,
+    underReview ? `${place} is closed for review.` : `${place} is sealed.`,
+  ].filter((line): line is string => Boolean(line));
   return { title, text: lines.join("\n"), path, url };
 }
 
@@ -122,13 +126,21 @@ export function sharePayloadForEvent(
     };
   }
 
-  const closed =
+  const spoken =
     event.totalMessages === 0
       ? "The Wall closed on a blank stone."
       : `${count} people spoke. The Wall does not reopen.`;
+  if (event.phase === "finalizing") {
+    return {
+      title: `${APP_NAME} — closed`,
+      text: ["The day is under review.", spoken].join("\n"),
+      path,
+      url,
+    };
+  }
   return {
     title: `${APP_NAME} — sealed`,
-    text: ["The Wall is sealed.", closed].join("\n"),
+    text: ["The Wall is sealed.", spoken].join("\n"),
     path,
     url,
   };

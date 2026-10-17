@@ -10,7 +10,7 @@ import {
   bindMessageHash,
   type StoredIntent,
 } from "@/lib/payment/fulfillment";
-import { parseUsdcTransfersToTreasury } from "@/lib/payment/onchain";
+import { collapseTreasuryTransfers, parseUsdcTransfersToTreasury } from "@/lib/payment/onchain";
 import { verifyPaymentSchema } from "@/lib/validation";
 import { mapPublishError } from "@/lib/data/rate-limit";
 import type { OnchainPayment } from "@/lib/payment/types";
@@ -208,6 +208,58 @@ describe("payment attack evaluation", () => {
     );
   });
 
+  it("accepts an exact on-chain $1 even when the status lookup says the payment failed", () => {
+    const verified = evaluatePaymentProof({
+      ...base,
+      intentCreatedAt: new Date(Date.now() - 5_000).toISOString(),
+      sdk: { status: "failed" },
+      onchain: onchain(),
+    });
+    expect(verified.amount).toBe("1.00");
+    expect(verified.sender).toBe(SENDER.toLowerCase());
+  });
+
+  it("rejects a found payment when the chain id was not observed", () => {
+    expectCode(
+      () =>
+        evaluatePaymentProof({
+          ...base,
+          intentCreatedAt: new Date(Date.now() - 5_000).toISOString(),
+          sdk: { status: "completed", sender: SENDER, recipient: TREASURY, amount: "1.00" },
+          onchain: onchain({ chainId: null }),
+        }),
+      ERROR_CODES.WRONG_NETWORK,
+    );
+  });
+
+  it("refuses the zero address as a payee", () => {
+    expectCode(
+      () =>
+        evaluatePaymentProof({
+          ...base,
+          expectedRecipient: "0x0000000000000000000000000000000000000000",
+          intentCreatedAt: new Date(Date.now() - 5_000).toISOString(),
+          sdk: { status: "completed" },
+          onchain: onchain({ recipient: "0x0000000000000000000000000000000000000000" }),
+        }),
+      ERROR_CODES.WRONG_RECIPIENT,
+    );
+  });
+
+  it("rejects a checkout that is not priced at 1.00 even if the transfer is 1.00", () => {
+    expectCode(
+      () =>
+        evaluatePaymentProof({
+          ...base,
+          expectedAmount: "0.01",
+          intentCreatedAt: new Date(Date.now() - 5_000).toISOString(),
+          sdk: { status: "completed", sender: SENDER, recipient: TREASURY, amount: "0.01" },
+          onchain: onchain(),
+        }),
+      ERROR_CODES.WRONG_AMOUNT,
+    );
+  });
+
   it("accepts only an exact 1.00 USDC transfer to the treasury on Base Sepolia", () => {
     const verified = evaluatePaymentProof({
       ...base,
@@ -264,6 +316,21 @@ describe("duplicate submissions and expiration", () => {
 });
 
 describe("on-chain transfer parsing", () => {
+  it("does not treat two payers that sum to $1 as one payment", () => {
+    expect(
+      collapseTreasuryTransfers([
+        { from: SENDER, to: TREASURY, value: BigInt(1) },
+        { from: OTHER, to: TREASURY, value: BigInt(999_999) },
+      ]),
+    ).toBeNull();
+    expect(
+      collapseTreasuryTransfers([
+        { from: SENDER, to: TREASURY, value: BigInt(400_000) },
+        { from: SENDER, to: TREASURY, value: BigInt(600_000) },
+      ]),
+    ).toEqual({ from: SENDER, value: BigInt(1_000_000) });
+  });
+
   it("ignores transfers not to the treasury and non-USDC logs", () => {
     const transferTopic = encodeEventTopics({
       abi: [

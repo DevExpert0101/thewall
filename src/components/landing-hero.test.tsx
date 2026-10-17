@@ -2,8 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { LandingHero } from "@/components/landing-hero";
 import { HERO_PITCH } from "@/lib/constants";
-import { monumentCanvasFromEnv } from "@/lib/monument/canvas";
-import { sampleMonumentEntry } from "@/lib/monument/sample";
 import type { EventSnapshot, PublicMessage } from "@/lib/types";
 
 function event(extra: Partial<EventSnapshot> = {}): EventSnapshot {
@@ -84,106 +82,18 @@ describe("landing event states", () => {
     expect(screen.queryByText(/thousands of viewers/i)).not.toBeInTheDocument();
   });
 
-  it("writes a newly sealed Victor onto the hero stone", async () => {
-    const canvas = monumentCanvasFromEnv();
-    const existing = sampleMonumentEntry({
-      id: "m1",
-      monumentNumber: 1,
-      text: "Call your mother.",
-      sentenceSnapshot: "Call your mother.",
-    });
-    const winner = sampleMonumentEntry({
-      id: "m14",
-      monumentNumber: 14,
-      text: "The night bus stayed.",
-      sentenceSnapshot: "The night bus stayed.",
-    });
-    vi.mocked(fetch).mockImplementation((url) => {
-      if (String(url).includes("/api/monument")) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              entries: [existing, winner],
-              sealedCount: 2,
-              capacity: null,
-              canvas,
-            }),
-            { status: 200, headers: { "Content-Type": "application/json" } },
-          ),
-        );
-      }
-      return Promise.resolve(
-        new Response(JSON.stringify({ phase: "archived", serverNow: "2026-08-17T18:00:00.000Z" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
-    });
-    render(
-      <LandingHero
-        event={event({
-          phase: "archived",
-          endsAt: "2026-08-16T20:00:00.000Z",
-          serverNow: "2026-08-17T18:00:00.000Z",
-        })}
-        monument={{
-          entries: [existing],
-          sealedCount: 1,
-          capacity: null,
-          canvas,
-        }}
-      />,
-    );
-    expect(screen.getByText(/call your mother/i)).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.getByText(/the night bus stayed/i)).toBeInTheDocument();
-    });
-    expect(document.querySelector(".monument-sentence.is-carving")).toBeTruthy();
-  });
-
-  it("paints winning sentences on the hero the same way /monument does", async () => {
-    const canvas = monumentCanvasFromEnv();
-    const first = sampleMonumentEntry({
-      id: "m1",
-      monumentNumber: 1,
-      text: "If you are reading this in fifty years, I drove a night bus and I liked the quiet.",
-      sentenceSnapshot: "If you are reading this in fifty years, I drove a night bus and I liked the quiet.",
-    });
-    const second = sampleMonumentEntry({
-      id: "m2",
-      monumentNumber: 2,
-      text: "Call your mother.",
-      sentenceSnapshot: "Call your mother.",
-    });
-    const { container } = render(
-      <LandingHero
-        event={event()}
-        monument={{
-          entries: [first, second],
-          sealedCount: 2,
-          capacity: null,
-          canvas,
-        }}
-      />,
-    );
-    expect(screen.getByText(/night bus/i)).toBeInTheDocument();
-    expect(screen.getByText(/call your mother/i)).toBeInTheDocument();
-    const sentences = container.querySelectorAll<HTMLElement>(".monument-sentence");
-    expect(sentences).toHaveLength(2);
-    expect(sentences[0]?.style.left).toBe(`${(first.x / canvas.width) * 100}%`);
-    expect(sentences[0]?.style.top).toBe(`${(first.y / canvas.height) * 100}%`);
-    expect(sentences[0]?.style.fontSize).toBe("15px");
-    expect(sentences[1]?.style.left).toBe(`${(second.x / canvas.width) * 100}%`);
-    expect(sentences[1]?.style.top).toBe(`${(second.y / canvas.height) * 100}%`);
+  it("keeps the hero stone free of winning sentences", async () => {
+    const { container } = render(<LandingHero event={event()} />);
     expect(container.querySelector(".hero-wall")?.getAttribute("data-intro")).toBe("playing");
-    expect(container.querySelector("source")?.getAttribute("src")).toBe("/hero-wall.mp4");
+    expect(container.querySelector("source")?.getAttribute("src")).toBe("/hero-wall-2.mp4");
     container.querySelector("video")?.dispatchEvent(new Event("ended"));
     await waitFor(() => {
       expect(container.querySelector(".hero-wall")?.getAttribute("data-intro")).toBe("done");
     });
     expect(container.querySelector("video")).toBeNull();
     expect(container.querySelector(".hero-stone")).toBeTruthy();
-    expect(container.querySelector("a.monument-sentence")).toBeNull();
+    expect(container.querySelector(".monument-sentence")).toBeNull();
+    expect(screen.queryByText(/night bus/i)).not.toBeInTheDocument();
   });
 
   it("keeps the lower totals in lockstep with the live pulse", async () => {

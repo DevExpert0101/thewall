@@ -8,7 +8,7 @@ describe("intro wall film", () => {
     const video = container.querySelector("video");
     expect(video).toBeTruthy();
     expect(video?.getAttribute("poster")).toBe("/hero-wall.png");
-    expect(container.querySelector("source")?.getAttribute("src")).toBe("/hero-wall.mp4");
+    expect(container.querySelector("source")?.getAttribute("src")).toBe("/hero-wall-2.mp4");
     expect(video?.hasAttribute("loop")).toBe(false);
   });
 });

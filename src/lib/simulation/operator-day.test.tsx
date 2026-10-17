@@ -19,7 +19,6 @@ import {
   resetSimulationState,
 } from "@/lib/data/simulation";
 import { AppError } from "@/lib/errors";
-import { monumentCanvasFromEnv } from "@/lib/monument/canvas";
 import { listMonumentEntries } from "@/lib/monument/store";
 import { preflightMessage } from "@/lib/publish/preflight";
 
@@ -187,17 +186,7 @@ describe("operator day through the hero stone", () => {
     });
     admin.unmount();
 
-    const hero = render(
-      <LandingHero
-        event={currentSimulatedEvent()}
-        monument={{
-          entries: [],
-          sealedCount: 0,
-          capacity: null,
-          canvas: monumentCanvasFromEnv(),
-        }}
-      />,
-    );
+    const hero = render(<LandingHero event={currentSimulatedEvent()} />);
     await user.click(screen.getByRole("button", { name: /leave your mark/i }));
     await user.type(await screen.findByLabelText(/your sentence/i), SENTENCE);
     await user.click(screen.getByRole("button", { name: /^preview$/i }));
@@ -256,25 +245,14 @@ describe("operator day through the hero stone", () => {
     expect(monument[0]?.originalPublicNumber).toBe(published.publicNumber);
     expect(monument[0]?.monumentNumber).toBe(1);
 
-    const { container } = render(
-      <LandingHero
-        event={currentSimulatedEvent()}
-        monument={{
-          entries: monument,
-          sealedCount: monument.length,
-          capacity: null,
-          canvas: monumentCanvasFromEnv(),
-        }}
-      />,
-    );
+    const { container } = render(<LandingHero event={currentSimulatedEvent()} />);
     expect(screen.getByText(/the wall №001 has closed/i)).toBeInTheDocument();
-    expect(document.querySelector("source")?.getAttribute("src")).toBe("/hero-wall.mp4");
+    expect(document.querySelector("source")?.getAttribute("src")).toBe("/hero-wall-2.mp4");
     container.querySelector("video")?.dispatchEvent(new Event("ended"));
     await waitFor(() => {
-      expect(screen.getByText(SENTENCE)).toBeInTheDocument();
+      expect(document.querySelector(".hero-stone")).toBeTruthy();
     });
-    expect(document.querySelectorAll(".monument-sentence")).toHaveLength(1);
-    expect(document.querySelector("a.monument-sentence")).toBeNull();
-    expect(document.querySelector(".hero-stone")).toBeTruthy();
+    expect(screen.queryByText(SENTENCE)).not.toBeInTheDocument();
+    expect(document.querySelector(".monument-sentence")).toBeNull();
   });
 });

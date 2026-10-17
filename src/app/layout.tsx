@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { cookies } from "next/headers";
 import { Cinzel, Geist, Geist_Mono, Newsreader } from "next/font/google";
 import { SiteShell } from "@/components/site-shell";
+import { ThemeBoot } from "@/components/theme-boot";
 import { APP_NAME, SUPPORTING_COPY, TAGLINE } from "@/lib/constants";
 import { isSimulation } from "@/lib/env";
-import { THEME_BOOT_SCRIPT } from "@/lib/design/theme";
-import { colors, DEFAULT_THEME, themes } from "@/lib/design/tokens";
+import { parseTheme, THEME_COOKIE } from "@/lib/design/theme";
+import { colors, themes } from "@/lib/design/tokens";
 import { siteUrl } from "@/lib/utils";
 import "./globals.css";
 
@@ -68,20 +69,18 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
   return (
     <html
       lang="en"
-      data-theme={DEFAULT_THEME}
-      data-scheme={themes[DEFAULT_THEME].scheme}
+      data-theme={theme}
+      data-scheme={themes[theme].scheme}
       data-scroll-behavior="smooth"
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} ${display.variable} ${cinzel.variable} h-full antialiased`}
     >
-      <head>
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
-      </head>
       <body className="grain min-h-full bg-stone font-sans text-paper">
+        <ThemeBoot />
         <div className="atmosphere" aria-hidden="true">
           <div className="atmosphere-glow" />
         </div>

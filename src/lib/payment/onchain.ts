@@ -8,7 +8,7 @@ import {
   type TransactionReceipt,
 } from "viem";
 import { base, baseSepolia } from "viem/chains";
-import { CHAIN_IDS, DEFAULT_RPC_URLS, USDC_ADDRESSES } from "@/lib/constants";
+import { DEFAULT_RPC_URLS, USDC_ADDRESSES } from "@/lib/constants";
 import type { OnchainPayment, PaymentNetwork } from "@/lib/payment/types";
 
 const TRANSFER = parseAbiItem(
@@ -54,10 +54,24 @@ export function parseUsdcTransfersToTreasury(
   return transfers;
 }
 
+/** One payer only. Split transfers that sum to $1 are not a single payment. */
+export function collapseTreasuryTransfers(
+  transfers: readonly OnchainTransfer[],
+): { from: `0x${string}`; value: bigint } | null {
+  if (transfers.length === 0) return null;
+  const from = getAddress(transfers[0].from);
+  let value = BigInt(0);
+  for (const transfer of transfers) {
+    if (getAddress(transfer.from) !== from) return null;
+    value += transfer.value;
+  }
+  return { from, value };
+}
+
 function summarizeTransfers(
   transfers: OnchainTransfer[],
   treasury: `0x${string}`,
-  chainId: number,
+  chainId: number | null,
   receiptFailed: boolean,
 ): OnchainPayment {
   if (receiptFailed) {
@@ -72,8 +86,8 @@ function summarizeTransfers(
       minedAt: null,
     };
   }
-  const total = transfers.reduce((sum, transfer) => sum + transfer.value, BigInt(0));
-  if (total === BigInt(0) || !transfers[0]) {
+  const paid = collapseTreasuryTransfers(transfers);
+  if (!paid || paid.value === BigInt(0)) {
     return {
       found: true,
       pending: false,
@@ -81,7 +95,7 @@ function summarizeTransfers(
       chainId,
       sender: null,
       recipient: getAddress(treasury),
-      amountAtomic: BigInt(0),
+      amountAtomic: paid ? paid.value : BigInt(0),
       minedAt: null,
     };
   }
@@ -90,9 +104,9 @@ function summarizeTransfers(
     pending: false,
     receiptFailed: false,
     chainId,
-    sender: getAddress(transfers[0].from),
+    sender: paid.from,
     recipient: getAddress(treasury),
-    amountAtomic: total,
+    amountAtomic: paid.value,
     minedAt: null,
   };
 }
@@ -138,8 +152,8 @@ export async function loadOnchainUsdcPayment(input: {
   token: `0x${string}`;
   treasury: `0x${string}`;
 }): Promise<OnchainPayment> {
-  const chainId = CHAIN_IDS[input.network];
   const client = publicClient(input.network);
+  const chainId = await client.getChainId().catch(() => null);
   const pending: OnchainPayment = {
     found: false,
     pending: true,

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { currentSimulatedEvent, listSimulatedMessages, simulatedMessageList } from "@/lib/data/simulation";
+import { currentSimulatedEvent, listSimulatedMessages, simulatedMessageList, startSimulatedWall } from "@/lib/data/simulation";
 import { compareRising } from "@/lib/ranking";
 import {
   addReactions,
@@ -219,10 +219,23 @@ describe("suite 30 — realtime infrastructure", () => {
   );
 
   it("moves trending on the server after 🔥; pulse clients keep card order until refresh", () => {
-    openShortLiveWall();
+    resetAutomatedWall();
+    startSimulatedWall({
+      title: "QA RISING SPREAD",
+      durationMinutes: 60,
+      startsAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+    });
     const quiet = payAndPublish("Quiet realtime sentence.");
     const loud = payAndPublish("Loud realtime sentence.");
-    addReactions(loud.messageId, 30);
+    const spreadEnd = Date.now();
+    for (let i = 0; i < 30; i += 1) {
+      const minute = Math.floor(i / 4);
+      reactOnce(
+        loud.messageId,
+        `local-sim-spread-${loud.messageId}-${i}`,
+        new Date(spreadEnd - (7 - minute) * 60_000),
+      );
+    }
 
     const server = risingTop(8);
     expect(server[0]).toBe(loud.publicNumber);

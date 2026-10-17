@@ -7,6 +7,19 @@ const address = z
   .string()
   .regex(/^0x[a-fA-F0-9]{40}$/, "Must be a 0x-prefixed 20-byte address");
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+function rejectBurnAddress(value: string): `0x${string}` {
+  if (value.toLowerCase() === ZERO_ADDRESS) {
+    throw new AppError(
+      ERROR_CODES.CONFIG,
+      "Treasury address must be a real wallet, not the zero address.",
+      503,
+    );
+  }
+  return value as `0x${string}`;
+}
+
 const network = z.enum(["base", "base-sepolia"]);
 
 function blankToUndefined(value: unknown): unknown {
@@ -240,7 +253,7 @@ export function getTreasuryAddress(): `0x${string}` {
       503,
     );
   }
-  return parsed.data as `0x${string}`;
+  return rejectBurnAddress(parsed.data);
 }
 
 export function getPublicTreasuryAddress(): `0x${string}` {
@@ -252,7 +265,7 @@ export function getPublicTreasuryAddress(): `0x${string}` {
       503,
     );
   }
-  return parsed.data as `0x${string}`;
+  return rejectBurnAddress(parsed.data);
 }
 
 export function isTestnet(): boolean {

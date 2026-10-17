@@ -1,6 +1,5 @@
 import { getPaymentStatus } from "@base-org/account";
 import { PRICE_USDC, USDC_ADDRESSES } from "@/lib/constants";
-import { AppError, ERROR_CODES } from "@/lib/errors";
 import { getNetwork, getTreasuryAddress } from "@/lib/env";
 import { assertExpectedNetwork, evaluatePaymentProof, normalizePaymentId } from "@/lib/payment/evaluate";
 import { loadOnchainUsdcPayment } from "@/lib/payment/onchain";
@@ -54,17 +53,9 @@ export class BaseUSDCProvider implements CryptoPaymentProvider {
         recipient: status.recipient,
         amount: status.amount,
       };
-    } catch (error) {
-      const message = error instanceof Error ? error.message.toLowerCase() : "";
-      if (message.includes("insufficient")) {
-        throw new AppError(ERROR_CODES.INSUFFICIENT_USDC, "Insufficient USDC.");
-      }
-      if (message.includes("recipient") || message.includes("to address")) {
-        throw new AppError(ERROR_CODES.WRONG_RECIPIENT, "Payment recipient mismatch.");
-      }
-      if (message.includes("amount")) {
-        throw new AppError(ERROR_CODES.WRONG_AMOUNT, "Payment amount mismatch.");
-      }
+    } catch {
+      // The chain transfer is the proof. An SDK lookup error must not
+      // reject a confirming $1 or skip the receipt.
       sdk = { status: "not_found" };
     }
 

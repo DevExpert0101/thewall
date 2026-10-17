@@ -11,7 +11,7 @@ export function ThemeSwitch() {
   const menuId = useId();
 
   useEffect(() => {
-    // document theme is applied by the boot script; read it after hydration.
+    // document theme is applied by the server cookie or ThemeBoot; read it after hydration.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from document
     setTheme(resolveDocumentTheme());
   }, []);

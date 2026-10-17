@@ -57,4 +57,16 @@ describe("message exhibit", () => {
     expect(screen.queryByRole("timer")).not.toBeInTheDocument();
     expect(screen.getByText(/final rank #2/i)).toBeInTheDocument();
   });
+
+  it("says closed, not sealed, while the day is still under review", () => {
+    render(
+      <MessageExhibit
+        event={{ ...event, phase: "finalizing" }}
+        message={message}
+      />,
+    );
+    expect(screen.getByText("Closed")).toBeInTheDocument();
+    expect(screen.queryByText("Sealed")).not.toBeInTheDocument();
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+  });
 });

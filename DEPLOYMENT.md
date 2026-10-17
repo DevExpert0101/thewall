@@ -1,5 +1,7 @@
 # Deploy The Wall to Vercel
 
+What to be careful about before anyone pays: [BEFORE-PUBLISH.md](BEFORE-PUBLISH.md).
+
 The Wall is a serverless Next.js app. Data lives in Supabase. Time comes from the database. There is no cron, no always-on Node process, and no local disk.
 
 Closing the event: when `now() >= events.ends_at`, SQL and API routes refuse writes. Rankings persist lazily on the next server request. Do not add a Vercel Cron to “close” The Wall.
@@ -13,7 +15,7 @@ npm run db:verify
 npm run build
 ```
 
-`npm run build` must succeed before you connect Vercel. Local builds do not require live secrets. The script uses webpack (`next build --webpack`) so Windows does not hit Turbopack’s `EBUSY` rename on `server-reference-manifest.json`. Vercel runs the same `npm run build`. `next dev` writes to `.next-webpack` so it does not lock the production `.next` folder.
+`npm run build` must succeed before you connect Vercel. Local builds do not require live secrets. `npm run dev` and `npm run build` both use webpack. On Windows, Turbopack’s dev server exits with an access violation, and its production build hits `EBUSY` renaming `server-reference-manifest.json`. Vercel runs the same `npm run build`. Dev writes to `.next-webpack` so it does not lock the production `.next` folder.
 
 ## 2. Supabase (production project)
 

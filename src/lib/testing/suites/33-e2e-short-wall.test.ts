@@ -10,7 +10,7 @@ import { certificateFromPublic } from "@/lib/certificate/public";
 import { encodeCertificateQr } from "@/lib/certificate/qr";
 import { lookupCertificate } from "@/lib/certificate/lookup";
 import { MESSAGE_MAX_GRAPHEMES, PRICE_USDC } from "@/lib/constants";
-import { createWallKey, hashWallKey, sha256Hex } from "@/lib/crypto";
+import { createWallKey, hashWallKey } from "@/lib/crypto";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import {
   createSimulatedIntent,
@@ -37,7 +37,6 @@ import {
   createUnpaidIntent,
   discloseResults,
   openUpcomingWall,
-  payAndPublish,
   reactOnce,
   resetAutomatedWall,
 } from "@/lib/testing/harness";

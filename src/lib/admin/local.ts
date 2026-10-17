@@ -9,7 +9,9 @@ export const LOCAL_ADMIN_EMAIL_DEFAULT = "admin@thewall.local";
 export const LOCAL_ADMIN_PASSWORD_DEFAULT = "thewall-local-admin";
 export const LOCAL_ADMIN_SESSION_TTL_SECONDS = 60 * 60 * 12;
 
-let processSecret: string | null = null;
+const LOCAL_ADMIN_SECRET_KEY = Symbol.for("thewall.localAdminSecret");
+
+type SecretGlobal = typeof globalThis & { [LOCAL_ADMIN_SECRET_KEY]?: string };
 
 export function localAdminEnabled(): boolean {
   return isSimulation() && !hasSupabaseConfig();
@@ -28,8 +30,11 @@ function localAdminPassword(): string {
 export function localAdminSecret(): string {
   const configured = process.env.ADMIN_LOCAL_SECRET?.trim();
   if (configured && configured.length >= 16) return configured;
-  processSecret ??= randomBytes(32).toString("hex");
-  return processSecret;
+  // Route bundles each get their own module copy. A module-local secret
+  // signs the cookie in one bundle and rejects it in the next.
+  const holder = globalThis as SecretGlobal;
+  holder[LOCAL_ADMIN_SECRET_KEY] ??= randomBytes(32).toString("hex");
+  return holder[LOCAL_ADMIN_SECRET_KEY];
 }
 
 /** Default password is only for loopback. A LAN or preview origin must set its own password. */

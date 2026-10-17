@@ -44,8 +44,12 @@ export function SharePanel({
     () => false,
   );
 
-  const url =
-    typeof window !== "undefined" ? `${window.location.origin}${payload.path}` : payload.url;
+  const origin = useSyncExternalStore(
+    () => () => undefined,
+    () => window.location.origin,
+    () => "",
+  );
+  const url = origin ? `${origin}${payload.path}` : payload.url;
 
   async function copy(kind: "link" | "discord") {
     try {

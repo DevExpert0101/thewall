@@ -1,3 +1,5 @@
+// Home-only skeleton. A root app/loading.tsx streams HTTP 200 before notFound(),
+// so missing messages, editions, and certificates would be soft 404s.
 export default function Loading() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24" aria-busy="true" aria-live="polite">

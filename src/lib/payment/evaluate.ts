@@ -1,7 +1,7 @@
 import { getAddress, type Hex } from "viem";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { CHAIN_IDS, PRICE_USDC } from "@/lib/constants";
-import { assertExactUsdcAmount } from "@/lib/payment/amount";
+import { assertCanonicalPrice, assertExactUsdcAmount } from "@/lib/payment/amount";
 import { assertTxBoundToCheckout } from "@/lib/payment/fulfillment";
 import type {
   OnchainPayment,
@@ -34,9 +34,12 @@ export function evaluatePaymentProof(input: {
 }): VerifiedPayment {
   const expectedRecipient = getAddress(input.expectedRecipient);
   const expectedChainId = CHAIN_IDS[input.expectedNetwork];
-
-  if (input.sdk.status === "failed") {
-    throw new AppError(ERROR_CODES.PAYMENT_FAILED, "Payment failed.");
+  assertCanonicalPrice(input.expectedAmount);
+  if (expectedRecipient === "0x0000000000000000000000000000000000000000") {
+    throw new AppError(
+      ERROR_CODES.WRONG_RECIPIENT,
+      "Treasury address must be a real wallet, not the zero address.",
+    );
   }
 
   if (input.onchain.receiptFailed) {
@@ -50,7 +53,7 @@ export function evaluatePaymentProof(input: {
     throw new AppError(ERROR_CODES.PAYMENT_PENDING, "Payment is still confirming.", 202);
   }
 
-  if (input.onchain.chainId !== null && input.onchain.chainId !== expectedChainId) {
+  if (input.onchain.chainId !== expectedChainId) {
     throw new AppError(ERROR_CODES.WRONG_NETWORK, "Transaction is on the wrong network.");
   }
 

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { envContract, getNetwork, getPublicEnv, isSimulation } from "@/lib/env";
+import { envContract, getNetwork, getPublicEnv, getTreasuryAddress, isSimulation } from "@/lib/env";
+import { AppError } from "@/lib/errors";
 
 describe("environment blanks", () => {
   it("treats empty and whitespace as missing", () => {
@@ -19,6 +20,12 @@ describe("environment blanks", () => {
     if (parsed.success) {
       expect(parsed.data.BASE_RPC_URL).toBeUndefined();
     }
+  });
+
+  it("refuses to charge the zero address", () => {
+    vi.stubEnv("BASE_TREASURY_ADDRESS", "0x0000000000000000000000000000000000000000");
+    vi.stubEnv("NEXT_PUBLIC_TREASURY_ADDRESS", "0x0000000000000000000000000000000000000000");
+    expect(() => getTreasuryAddress()).toThrow(AppError);
   });
 
   it("ignores an invalid treasury instead of failing the whole public env", () => {

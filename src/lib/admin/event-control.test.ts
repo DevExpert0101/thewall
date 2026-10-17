@@ -87,10 +87,12 @@ describe("admin wall control", () => {
       action: "start",
       title: "DAY TWO",
       durationMinutes: 10,
+      themeQuestion: "What should the stone remember?",
     });
     expect(event.phase).toBe("live");
     expect(event.title).toBe("DAY TWO");
     expect(event.windowMinutes).toBe(10);
+    expect(event.themeQuestion).toBe("What should the stone remember?");
   });
 
   it("closes a live wall for review without disclosing results", async () => {

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { Countdown } from "@/components/countdown";
 import { useSyncedNow } from "@/lib/event/clock";
 import { formatEventInstant, phaseAfterClock } from "@/lib/event/remaining";
-import { isEventClosed, reconcilePublicPhase } from "@/lib/event/state";
+import { isEventClosed, isEventSealed, reconcilePublicPhase } from "@/lib/event/state";
 import { FIRST_HUNDRED_LINE, JUST_OPENED_TITLE } from "@/lib/launch/cold-start";
 import type { EventSnapshot, PublicMessage } from "@/lib/types";
 import {
@@ -305,9 +305,11 @@ export function WatchDeck({
           <p className="lede mt-4">
             {displayPhase === "upcoming"
               ? "No sentences yet. The countdown is the show."
-              : isEventClosed(displayPhase)
+              : isEventSealed(displayPhase)
                 ? "The Wall is sealed. Reading is free."
-                : FIRST_HUNDRED_LINE}
+                : isEventClosed(displayPhase)
+                  ? "The day is under review. Reading is free."
+                  : FIRST_HUNDRED_LINE}
           </p>
         </div>
       ) : focusLayout && focused ? (

@@ -11,7 +11,7 @@ import {
   publicCertificatePath,
 } from "@/lib/certificate/public";
 import { lookupCertificate } from "@/lib/certificate/lookup";
-import { createWallKey, sha256Hex } from "@/lib/crypto";
+import { sha256Hex } from "@/lib/crypto";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import {
   currentSimulatedEvent,

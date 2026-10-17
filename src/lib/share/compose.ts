@@ -160,7 +160,9 @@ export function composeCreative(input: {
         ? untilOpenClause(event.startsAt, event.serverNow) + "."
         : event.phase === "live"
           ? `${remainClause(event.endsAt, event.serverNow)}.`
-          : "The Wall is sealed. It does not reopen.";
+          : event.phase === "finalizing"
+            ? "The day is under review."
+            : "The Wall is sealed. It does not reopen.";
     return {
       kind,
       kicker: APP_NAME,
@@ -201,6 +203,15 @@ export function composeCreative(input: {
         event.totalMessages < FIRST_VOICES
           ? firstHundredLine(event.totalMessages).toUpperCase()
           : `${formatCount(event.totalMessages)} people spoke.`,
+      foot: `${formatCount(event.totalMessages)} people  ·  ${formatCount(event.totalReactions)} 🔥`,
+    };
+  }
+  if (event.phase === "finalizing") {
+    return {
+      kind: "countdown",
+      kicker: APP_NAME,
+      title: "THE WALL IS CLOSED",
+      body: "The day is under review.",
       foot: `${formatCount(event.totalMessages)} people  ·  ${formatCount(event.totalReactions)} 🔥`,
     };
   }

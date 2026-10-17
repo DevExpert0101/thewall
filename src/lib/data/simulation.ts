@@ -17,7 +17,7 @@ import { normalizeMessage } from "@/lib/message/normalize";
 import { bindMessageHash } from "@/lib/payment/fulfillment";
 import { paidAfterCloseError } from "@/lib/payment/recover";
 import { assertCanCharge } from "@/lib/publish/gate";
-import { assignFinalRanks, compareRising, inFinalHour, selectHiddenGems } from "@/lib/ranking";
+import { assignFinalRanks, compareRising, inFinalHour, RISING_WINDOW_MS, selectHiddenGems } from "@/lib/ranking";
 import { buildCanonicalArchive } from "@/lib/archive/canonical";
 import { highlightFrom } from "@/lib/archive/records";
 import { defaultEventOps, type EventOpsControls } from "@/lib/ops/controls";
@@ -104,6 +104,7 @@ const SEEDS: Seed[] = [
 ];
 
 const extraFires = new Map<string, number>();
+const extraFireTimes = new Map<string, number[]>();
 const simulatedReactors = new Set<string>();
 const simulatedIdempotency = new Map<string, string>();
 const extraWrites: ExtraWrite[] = [];
@@ -160,6 +161,8 @@ type PersistedState = {
   writes?: ExtraWrite[];
   intents?: SimIntent[];
   fires?: [string, number][];
+  /** Epoch ms for each extra 🔥, same order as the count in `fires`. */
+  fireTimes?: [string, number[]][];
   reactors?: string[];
   archive?: SimulatedArchive | null;
   editions?: SimulatedArchive[];
@@ -193,7 +196,26 @@ function applyPersisted(raw: PersistedState) {
   seedModeration.clear();
   for (const [n, status] of raw.seedModeration ?? []) seedModeration.set(n, status);
   extraFires.clear();
+  extraFireTimes.clear();
   for (const [id, count] of raw.fires ?? []) extraFires.set(id, count);
+  for (const [id, times] of raw.fireTimes ?? []) {
+    if (!Array.isArray(times)) continue;
+    extraFireTimes.set(
+      id,
+      times.filter((stamp) => Number.isFinite(stamp)),
+    );
+  }
+  const backfillStamp = Date.now();
+  for (const [id, count] of extraFires) {
+    const times = extraFireTimes.get(id) ?? [];
+    if (times.length === count) continue;
+    if (times.length > count) {
+      extraFireTimes.set(id, times.slice(0, count));
+      continue;
+    }
+    const stamp = times.at(-1) ?? backfillStamp;
+    extraFireTimes.set(id, [...times, ...Array.from({ length: count - times.length }, () => stamp)]);
+  }
   simulatedReactors.clear();
   simulatedIdempotency.clear();
   for (const key of raw.reactors ?? []) simulatedReactors.add(key);
@@ -255,6 +277,7 @@ function persist() {
         writes: extraWrites,
         intents: [...intents.values()],
         fires: [...extraFires.entries()],
+        fireTimes: [...extraFireTimes.entries()],
         reactors: [...simulatedReactors],
         archive: archiveSnapshot,
         editions: sealedEditions,
@@ -284,6 +307,7 @@ function persist() {
 
 function clearLiveSimulation() {
   extraFires.clear();
+  extraFireTimes.clear();
   simulatedReactors.clear();
   simulatedIdempotency.clear();
   extraWrites.splice(0, extraWrites.length);
@@ -653,6 +677,18 @@ export function startSimulatedWall(input: SimulatedWallConfig = {}) {
     const next = clampTitle(input.title);
     titleOverride = next.length > 0 ? next : "THE WALL";
   }
+  if (input.themeSlug !== undefined) {
+    const slug = input.themeSlug.trim().toLowerCase();
+    themeSlugOverride = slug.length > 0 ? slug.slice(0, 80) : null;
+  }
+  if (input.themeQuestion !== undefined) {
+    const next = input.themeQuestion.trim().slice(0, 280);
+    themeQuestionOverride = next.length > 0 ? next : null;
+  }
+  if (input.themeDescription !== undefined) {
+    const next = input.themeDescription.trim().slice(0, 800);
+    themeDescriptionOverride = next.length > 0 ? next : null;
+  }
   if (input.durationMinutes !== undefined) {
     windowMsOverride = Math.max(60_000, Math.round(input.durationMinutes) * 60_000);
   }
@@ -665,6 +701,7 @@ export function startSimulatedWall(input: SimulatedWallConfig = {}) {
   }
   if (isSimulatedWallClosed()) {
     extraFires.clear();
+    extraFireTimes.clear();
     simulatedReactors.clear();
     simulatedIdempotency.clear();
     extraWrites.splice(0, extraWrites.length);
@@ -996,6 +1033,23 @@ export function pickSimulatedRandomMessages(input: {
   return pickFromList(listed.messages, input.exclude ?? [], input.count ?? 2, input.random);
 }
 
+/** Last-hour 🔥 the same way SQL does: count rows, and distinct minutes. */
+function risingHour(
+  messageId: string,
+  seed: Seed | undefined,
+  now: Date,
+): { hourCount: number; hourMinutes: number } {
+  const windowStart = now.getTime() - RISING_WINDOW_MS;
+  const times = (extraFireTimes.get(messageId) ?? []).filter(
+    (stamp) => stamp >= windowStart && stamp <= now.getTime(),
+  );
+  const extraMinutes = new Set(times.map((stamp) => Math.floor(stamp / 60_000)));
+  const hourCount = (seed?.hourFires ?? 0) + times.length;
+  let hourMinutes = (seed?.hourMinutes ?? 0) + extraMinutes.size;
+  if (hourCount > 0 && hourMinutes < 1) hourMinutes = 1;
+  return { hourCount, hourMinutes: Math.min(60, hourMinutes) };
+}
+
 export function listSimulatedMessages(input: {
   sort: AcceptedSort | MessageSort;
   limit: number;
@@ -1041,13 +1095,7 @@ export function listSimulatedMessages(input: {
     const scored = visible
       .map((message) => {
         const seed = byNumber.get(message.publicNumber);
-        const extra = extraFires.get(message.id) ?? 0;
-        const hourCount = (seed?.hourFires ?? 0) + extra;
-        const recordedMinutes = seed?.hourMinutes ?? 0;
-        const hourMinutes = Math.min(
-          60,
-          recordedMinutes > 0 ? recordedMinutes : hourCount > 0 ? 1 : 0,
-        );
+        const { hourCount, hourMinutes } = risingHour(message.id, seed, now);
         return { message, hourCount, hourMinutes };
       })
       .filter((row) => row.hourCount > 0);
@@ -1144,6 +1192,9 @@ export function addSimulatedReaction(
   }
   const next = (extraFires.get(messageId) ?? 0) + 1;
   extraFires.set(messageId, next);
+  const times = extraFireTimes.get(messageId) ?? [];
+  times.push(now.getTime());
+  extraFireTimes.set(messageId, times);
   persist();
   return message.reactionCount + 1;
 }

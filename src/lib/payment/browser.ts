@@ -16,7 +16,15 @@ export function checkoutFromIntent(intent: {
     throw new Error("Price must be 1.00 USDC.");
   }
   const recipient = getAddress(intent.recipient) as `0x${string}`;
-  const treasury = getPublicTreasuryAddress();
+  if (recipient === "0x0000000000000000000000000000000000000000") {
+    throw new Error("Treasury address is not configured.");
+  }
+  let treasury: `0x${string}`;
+  try {
+    treasury = getPublicTreasuryAddress();
+  } catch {
+    throw new Error("Treasury address is not configured.");
+  }
   if (recipient !== getAddress(treasury)) {
     throw new Error("Checkout recipient mismatch.");
   }

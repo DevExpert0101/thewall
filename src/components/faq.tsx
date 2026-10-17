@@ -13,7 +13,7 @@ const ITEMS = [
   },
   {
     q: "What happens when time runs out?",
-    a: "Writing and 🔥 stop at once, even if a browser still shows a few seconds. The day is sealed as The Wall №001. Later days become №002, №003, and so on. The conversation ends. The record remains.",
+    a: "Writing and 🔥 stop at once, even if a browser still shows a few seconds. The day stays under review until it is finished. Then it is sealed as The Wall №001. Later days become №002, №003, and so on. The conversation ends. The record remains.",
   },
   {
     q: "Can I get a refund?",
