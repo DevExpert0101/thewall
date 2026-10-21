@@ -4,7 +4,13 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "edge") return;
   if (process.env.NEXT_PHASE === "phase-production-build") return;
   const { assertProductionEnv } = await import("@/lib/env/production");
-  assertProductionEnv();
+  try {
+    assertProductionEnv();
+  } catch (error) {
+    // A missing production secret must not 500 every page. Paid routes still
+    // refuse to charge, and /api/health stays not-ok until the contract passes.
+    console.error(error);
+  }
 }
 
 export const onRequestError: Instrumentation.onRequestError = async (
