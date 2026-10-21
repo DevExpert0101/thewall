@@ -58,8 +58,9 @@ export function parseUsdcTransfersToTreasury(
 export function collapseTreasuryTransfers(
   transfers: readonly OnchainTransfer[],
 ): { from: `0x${string}`; value: bigint } | null {
-  if (transfers.length === 0) return null;
-  const from = getAddress(transfers[0].from);
+  const first = transfers[0];
+  if (!first) return null;
+  const from = getAddress(first.from);
   let value = BigInt(0);
   for (const transfer of transfers) {
     if (getAddress(transfer.from) !== from) return null;
